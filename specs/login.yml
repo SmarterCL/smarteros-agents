@@ -1,0 +1,146 @@
+# Login Unificado - Especificaciones Técnicas
+
+version: "0.1.0"
+last_updated: "2025-11-13"
+
+# Definición del login estándar de SmarterOS
+login_standard:
+  base_reference: "https://odoo.smarterbot.cl/"
+  
+  # Servicios que NO usan este login (excepciones)
+  exceptions:
+    - app.smarterbot.cl  # Mantiene su diseño actual (cockpit de founders)
+  
+  # Servicios que SÍ deben usar este login
+  applies_to:
+    - odoo.smarterbot.cl
+    - n8n.smarterbot.cl
+    - metabase.smarterbot.cl
+    - chatwoot.smarterbot.cl
+    - botpress.smarterbot.cl
+    - cualquier nuevo servicio del ecosistema
+
+# UI/UX Guidelines
+visual_design:
+  layout:
+    type: "centered_card"
+    max_width: "400px"
+    padding: "40px"
+    background: "corporate_gradient"
+    border_radius: "8px"
+    box_shadow: "0 4px 12px rgba(0,0,0,0.1)"
+  
+  colors:
+    primary: "#2563eb"  # Azul corporativo
+    secondary: "#1e40af"
+    background: "#f9fafb"
+    card_background: "#ffffff"
+    text: "#111827"
+    text_secondary: "#6b7280"
+    error: "#ef4444"
+    success: "#10b981"
+  
+  typography:
+    font_family: "Inter, system-ui, sans-serif"
+    title_size: "24px"
+    title_weight: "600"
+    input_size: "16px"
+    button_size: "16px"
+    button_weight: "500"
+  
+  inputs:
+    height: "44px"
+    border: "1px solid #d1d5db"
+    border_radius: "6px"
+    focus_border: "#2563eb"
+    padding: "12px 16px"
+    background: "#ffffff"
+  
+  button:
+    height: "44px"
+    background: "#2563eb"
+    hover_background: "#1e40af"
+    color: "#ffffff"
+    border_radius: "6px"
+    font_weight: "500"
+    transition: "all 0.2s ease"
+
+# Flujo de autenticación
+auth_flow:
+  steps:
+    - id: 1
+      action: "display_login_form"
+      fields:
+        - email
+        - password
+    
+    - id: 2
+      action: "validate_credentials"
+      provider: "clerk"  # o supabase según el servicio
+    
+    - id: 3
+      action: "check_tenant_access"
+      validation: "RLS + tenant_id"
+    
+    - id: 4
+      action: "redirect_to_service"
+      target: "service_dashboard"
+
+# Multi-tenant
+multitenant:
+  tenant_detection:
+    method: "subdomain"  # tenant1.odoo.smarterbot.cl
+    fallback: "query_param"  # ?tenant=tenant1
+  
+  tenant_validation:
+    check_active: true
+    check_subscription: true
+    check_permissions: true
+
+# Integraciones
+integrations:
+  auth_providers:
+    - name: "Clerk"
+      services: ["app.smarterbot.cl"]
+      features: ["magic_link", "oauth", "2fa"]
+    
+    - name: "Supabase Auth"
+      services: ["backend services"]
+      features: ["email_password", "magic_link"]
+    
+    - name: "Odoo Auth"
+      services: ["odoo.smarterbot.cl"]
+      features: ["email_password", "oauth"]
+
+# Componentes reutilizables
+components:
+  react:
+    - name: "UnifiedLogin"
+      path: "/templates/login/UnifiedLogin.tsx"
+      props: ["tenant", "redirect_url", "provider"]
+    
+    - name: "LoginButton"
+      path: "/templates/login/LoginButton.tsx"
+      props: ["variant", "loading", "disabled"]
+    
+    - name: "LoginInput"
+      path: "/templates/login/LoginInput.tsx"
+      props: ["type", "label", "error"]
+
+# Assets
+assets:
+  css:
+    global: "/design/login-theme/global.css"
+    components: "/design/login-theme/components.css"
+  
+  images:
+    logo: "/design/login-theme/smarterbot-logo.svg"
+    background: "/design/login-theme/login-bg.svg"
+
+# Notas de implementación
+implementation_notes: |
+  1. Todos los servicios deben replicar el look & feel de odoo.smarterbot.cl
+  2. Los colores, tipografía y layout deben ser idénticos
+  3. El flujo de autenticación debe ser consistente
+  4. La detección de tenant debe funcionar correctamente
+  5. Los errores deben mostrarse de manera clara y consistente
