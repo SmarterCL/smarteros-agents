@@ -1,0 +1,43 @@
+service:
+  id: call-smarterbot
+  name: call.smarterbot.cl
+  version: "1.0"
+  tier: 6
+  category: call-center
+  subdomain: call.smarterbot.cl
+
+technology:
+  framework: Microsoft Call Center AI
+  repo: https://github.com/microsoft/call-center-ai
+  runtime: Node.js + Azure Services
+  port: 3020
+
+auth:
+  provider: supabase
+  shared_session: true
+  origins:
+    - https://app.smarterbot.cl
+    - https://call.smarterbot.cl
+
+mcp_providers:
+  - callcenter-conversation
+  - callcenter-speech
+
+deployment:
+  method: docker-compose
+  compose_file: dkcompose/docker-compose.mkt-call.yml
+  container_name: smarter-callcenter
+  proxy: traefik
+  ssl: letsencrypt
+
+environment:
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - SUPABASE_SERVICE_ROLE_KEY
+  - AZURE_SPEECH_KEY
+  - AZURE_SPEECH_REGION
+
+notes: |
+  Servicio de call center con IA integrado con login compartido vía Supabase.
+  Los agentes pueden acceder a transcripciones, análisis de conversación y Speech Services.
+  Requiere configuración de Azure Speech y Realtime en Vault bajo smarteros/mcp/callcenter y smarteros/mcp/azure-speech.

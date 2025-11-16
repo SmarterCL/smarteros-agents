@@ -1,0 +1,680 @@
+# 🔌 MCP Registry — Mapeo de Providers a Agentes
+
+version: "2.0"
+description: "Registro centralizado de 25 MCP providers con asignación a agentes tri-agent y políticas Vault"
+updated: "2025-11-16"
+
+metadata:
+  total_providers: 28
+  total_tiers: 6
+  vault_base_path: "smarteros/mcp/"
+  policy_prefix: "mcp-"
+  audit_enabled: true
+
+providers:
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # TIER 1: Core Infrastructure (Always Active)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  github:
+    tier: 1
+    category: "core"
+    primary_agent: "director-gemini"
+    secondary_agents: ["writer-copilot", "executor-codex"]
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/github"
+      keys: ["token", "org", "webhook_secret"]
+      vault_policy: "mcp-github-read"
+    
+    capabilities:
+      gemini: 
+        read: ["issues", "prs", "commits", "discussions"]
+        write: ["comments", "issues", "labels"]
+      copilot:
+        read: ["code", "diffs", "tree", "blame"]
+        write: ["prs", "reviews"]
+      codex:
+        read: ["releases", "tags"]
+        write: ["push_tags", "create_releases", "merge_prs"]
+    
+    rate_limit:
+      limit: "5000/hour"
+      burst: 100
+      per_agent: true
+    
+    fallback: "degraded_mode"
+    required: true
+    health_check:
+      endpoint: "https://api.github.com/rate_limit"
+      interval: "5m"
+  
+  vault:
+    tier: 1
+    category: "core"
+    primary_agent: "all"
+    
+    auth:
+      method: "token"
+      source: "env:VAULT_TOKEN"
+      vault_policy: "self"
+    
+    capabilities:
+      gemini: 
+        read: ["smarteros/mcp/*", "smarteros/agents/gemini-*", "smarteros/ssh/read-only"]
+        write: ["smarteros/agents/gemini-*", "smarteros/state/*"]
+      copilot:
+        read: ["smarteros/mcp/github", "smarteros/mcp/supabase", "smarteros/mcp/context7"]
+        write: ["smarteros/agents/copilot-*"]
+      codex:
+        read: ["smarteros/mcp/*", "smarteros/ssh/*"]
+        write: ["smarteros/agents/codex-*", "smarteros/state/*"]
+    
+    rate_limit:
+      limit: "unlimited"
+      burst: 0
+    
+    required: true
+    health_check:
+      command: "vault status"
+      expect: "unsealed"
+      interval: "1m"
+  
+  docker:
+    tier: 1
+    category: "core"
+    primary_agent: "executor-codex"
+    
+    auth:
+      method: "socket"
+      path: "/var/run/docker.sock"
+    
+    capabilities:
+      codex: ["build", "compose", "ps", "logs"]
+    
+    rate_limit: "unlimited"
+    fallback: "alert"
+  
+  hostinger:
+    tier: 1
+    category: "core"
+    primary_agent: "executor-codex"
+    secondary_agents: ["director-gemini"]
+    
+    auth:
+      method: "bearer-token"
+      vault_path: "smarteros/mcp/hostinger"
+      keys: ["api_token", "endpoint"]
+      vault_policy: "mcp-hostinger-read"
+    
+    mcp_server:
+      name: "hostinger-api-mcp"
+      npm_package: "hostinger-api-mcp"
+      repository: "https://github.com/hostinger/api-mcp-server"
+    
+    capabilities:
+      codex:
+        # VPS Lifecycle
+        vps_lifecycle: 
+          - "VPS_getVirtualMachinesV1"
+          - "VPS_startVirtualMachineV1"
+          - "VPS_stopVirtualMachineV1"
+          - "VPS_rebootVirtualMachineV1"
+        
+        # SSH Keys Management via API
+        ssh_keys_api:
+          - "VPS_createPublicKeyV1"
+          - "VPS_attachPublicKeyV1"
+          - "VPS_getAttachedPublicKeysV1"
+        
+        # Firewall & Backups
+        firewall: ["VPS_activateFirewallV1", "VPS_deactivateFirewallV1"]
+        backups: ["VPS_createBackupV1", "VPS_restoreBackupV1"]
+        
+        # Docker & Network
+        docker: ["VPS_getProjectsV1", "VPS_updateProjectV1"]
+        network: ["VPS_setNameserversV1"]
+      
+      gemini:
+        domains: 
+          - "domains_checkDomainAvailabilityV1"
+          - "domains_enablePrivacyProtectionV1"
+          - "domains_createDomainForwardingV1"
+        billing: ["billing_getPaymentMethodsV1"]
+        read_only: true
+    
+    connection_test: "VPS_getVirtualMachinesV1"
+    required: true
+    
+    notes: |
+      Hostinger API MCP complementa el acceso SSH directo (smarteros/ssh/deploy).
+      
+      Use API MCP para: management operations (VPS lifecycle, SSH keys, domains)
+      Use SSH directo para: deploy operations (rsync, systemctl, logs)
+  
+  supabase:
+    tier: 1
+    category: "core"
+    primary_agent: "director-gemini"
+    secondary_agents: ["writer-copilot"]
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/supabase"
+      keys: ["url", "anon_key", "service_role_key"]
+      vault_policy: "mcp-supabase-read"
+    
+    capabilities:
+      gemini:
+        read: ["users", "auth_logs", "rls_policies", "schema"]
+        write: []
+        query: true
+      copilot:
+        read: ["schema", "types", "edge_functions", "migrations"]
+        write: []
+        generate_types: true
+    
+    rate_limit:
+      limit: "1000/minute"
+      burst: 50
+      per_agent: true
+    
+    fallback: "cached_schema"
+    cache_ttl: "5m"
+    health_check:
+      endpoint: "${SUPABASE_URL}/rest/v1/"
+      interval: "2m"
+  
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # TIER 2: Business Logic
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  shopify:
+    tier: 2
+    category: "business"
+    primary_agent: "director-gemini"
+    secondary_agents: ["writer-copilot"]
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/shopify"
+      keys: ["api_key", "api_secret", "shop_url", "access_token"]
+      vault_policy: "mcp-shopify-gemini-read"
+    
+    capabilities:
+      gemini:
+        read: ["orders", "products", "customers", "inventory", "analytics"]
+        write: []
+        graphql: true
+      copilot:
+        read: ["api_schema", "graphql_schema", "types"]
+        write: []
+    
+    rate_limit:
+      limit: "2/second"
+      burst: 10
+      bucket_size: 40
+    
+    fallback: "cached_data"
+    cache_ttl: "15m"
+    health_check:
+      endpoint: "https://${SHOP_URL}/admin/api/2024-10/shop.json"
+      interval: "10m"
+  
+  metabase:
+    tier: 2
+    category: "business"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/metabase"
+      keys: ["url", "username", "password"]
+    
+    capabilities:
+      gemini: ["query_dashboards", "query_metrics", "read_kpis"]
+    
+    rate_limit: "100/minute"
+    fallback: "skip_analytics"
+  
+  odoo:
+    tier: 2
+    category: "business"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/odoo"
+      keys: ["url", "db", "username", "api_key"]
+    
+    capabilities:
+      gemini: ["read_crm", "read_invoices", "read_inventory"]
+    
+    rate_limit: "60/minute"
+    fallback: "skip_erp_data"
+  
+  n8n:
+    tier: 2
+    category: "business"
+    primary_agent: "director-gemini"
+    secondary_agents: ["executor-codex"]
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/n8n"
+      keys: ["url", "api_key"]
+    
+    capabilities:
+      gemini: ["read_workflows", "read_executions"]
+      codex: ["trigger_workflow"]
+    
+    rate_limit: "100/minute"
+    fallback: "skip_workflow_triggers"
+  
+  stripe:
+    tier: 2
+    category: "business"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/stripe"
+      keys: ["api_key", "webhook_secret"]
+    
+    capabilities:
+      gemini: ["read_customers", "read_subscriptions", "read_invoices"]
+    
+    rate_limit: "100/second"
+    fallback: "cached_data"
+  
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # TIER 3: AI/ML
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  openai:
+    tier: 3
+    category: "ai"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/openai"
+      keys: ["api_key"]
+    
+    capabilities:
+      gemini: ["embeddings", "classification", "analysis"]
+    
+    rate_limit: "3500/minute"
+    cost_limit: "10 USD/day"
+    fallback: "anthropic"
+  
+  anthropic:
+    tier: 3
+    category: "ai"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/anthropic"
+      keys: ["api_key"]
+    
+    capabilities:
+      gemini: ["analysis", "reasoning", "validation"]
+    
+    rate_limit: "50/minute"
+    cost_limit: "10 USD/day"
+    fallback: "openai"
+  
+  google:
+    tier: 3
+    category: "ai"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/google"
+      keys: ["api_key"]
+    
+    capabilities:
+      gemini: ["gemini_api", "vertex_ai"]
+    
+    rate_limit: "60/minute"
+    fallback: "self (as primary model)"
+  
+  context7:
+    tier: 3
+    category: "ai"
+    primary_agent: "writer-copilot"
+    
+    auth:
+      method: "public"
+    
+    capabilities:
+      copilot: ["docs_nextjs", "docs_react", "docs_tailwind", "docs_supabase"]
+    
+    rate_limit: "100/minute"
+    fallback: "local_docs_cache"
+  
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # TIER 4: Communication
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  slack:
+    tier: 4
+    category: "communication"
+    primary_agent: "director-gemini"
+    secondary_agents: ["executor-codex"]
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/slack"
+      keys: ["bot_token", "webhook_url"]
+    
+    capabilities:
+      gemini: ["read_messages", "send_notifications", "create_issues_from_messages"]
+      codex: ["send_deployment_notifications"]
+    
+    rate_limit: "1/second"
+    fallback: "email"
+  
+  twilio:
+    tier: 4
+    category: "communication"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/twilio"
+      keys: ["account_sid", "auth_token", "phone_number"]
+    
+    capabilities:
+      gemini: ["send_sms", "read_sms_logs"]
+    
+    rate_limit: "100/minute"
+    fallback: "skip_sms"
+  
+  whatsapp:
+    tier: 4
+    category: "communication"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/whatsapp"
+      keys: ["api_key", "phone_number_id"]
+    
+    capabilities:
+      gemini: ["send_messages", "read_messages", "analyze_conversations"]
+    
+    rate_limit: "80/minute"
+    fallback: "skip_whatsapp"
+  
+  mailgun:
+    tier: 4
+    category: "communication"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/mailgun"
+      keys: ["api_key", "domain"]
+    
+    capabilities:
+      gemini: ["send_email", "read_logs"]
+    
+    rate_limit: "100/minute"
+    fallback: "skip_email"
+  
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # TIER 5: DevOps/Infrastructure
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  cloudflare:
+    tier: 5
+    category: "devops"
+    primary_agent: "executor-codex"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/cloudflare"
+      keys: ["api_token", "zone_id"]
+    
+    capabilities:
+      codex: ["dns_update", "cache_purge", "read_analytics"]
+    
+    rate_limit: "1200/5min"
+    fallback: "manual_dns"
+  
+  aws:
+    tier: 5
+    category: "devops"
+    primary_agent: "executor-codex"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/aws"
+      keys: ["access_key_id", "secret_access_key", "region"]
+    
+    capabilities:
+      codex: ["s3_upload", "cloudfront_invalidate"]
+    
+    rate_limit: "100/second"
+    fallback: "skip_cdn"
+  
+  caddy:
+    tier: 5
+    category: "devops"
+    primary_agent: "executor-codex"
+    
+    auth:
+      method: "ssh"
+      via: "hostinger"
+    
+    capabilities:
+      codex: ["reload_config", "read_logs"]
+    
+    rate_limit: "unlimited"
+    required: true
+  
+  linear:
+    tier: 5
+    category: "devops"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/linear"
+      keys: ["api_key"]
+    
+    capabilities:
+      gemini: ["read_issues", "create_issues", "update_status"]
+    
+    rate_limit: "100/minute"
+    fallback: "github_issues"
+  
+  notion:
+    tier: 5
+    category: "devops"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "vault"
+      path: "smarteros/mcp/notion"
+      keys: ["api_key", "database_id"]
+    
+    capabilities:
+      gemini: ["read_roadmap", "update_docs"]
+    
+    rate_limit: "3/second"
+    fallback: "skip_notion"
+  
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # TIER 6: Marketing & Call Center
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  blogbowl-filesystem:
+    tier: 6
+    category: "marketing"
+    primary_agent: "writer-copilot"
+    secondary_agents: ["director-gemini"]
+    
+    auth:
+      method: "filesystem"
+      root_path: "front/mkt.smarterbot.cl"
+    
+    capabilities:
+      copilot: ["read_content", "list_posts", "update_markdown"]
+      gemini: ["read_analytics"]
+    
+    rate_limit: "unlimited"
+    notes: |
+      MCP Filesystem para gestión de contenido de BlogBowl en mkt.smarterbot.cl
+  
+  callcenter-conversation:
+    tier: 6
+    category: "call-center"
+    primary_agent: "director-gemini"
+    secondary_agents: ["executor-codex"]
+    
+    auth:
+      method: "api-key"
+      vault_path: "smarteros/mcp/callcenter"
+      keys: ["api_key", "endpoint"]
+    
+    capabilities:
+      gemini: ["read_transcripts", "analyze_sentiment", "generate_summary"]
+      codex: ["trigger_calls", "update_status"]
+    
+    rate_limit: "100/minute"
+    notes: |
+      MCP para integración con Microsoft Call Center AI en call.smarterbot.cl
+  
+  callcenter-speech:
+    tier: 6
+    category: "call-center"
+    primary_agent: "director-gemini"
+    
+    auth:
+      method: "azure-token"
+      vault_path: "smarteros/mcp/azure-speech"
+      keys: ["subscription_key", "region"]
+    
+    capabilities:
+      gemini: ["speech_to_text", "text_to_speech", "analyze_audio"]
+    
+    rate_limit: "20/second"
+    cost_limit: "5 USD/day"
+    notes: |
+      Azure Speech Services para el motor de call center
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Agent Access Matrix
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+access_matrix:
+  director-gemini:
+    tier_1: ["github", "vault", "supabase"]
+    tier_2: ["shopify", "metabase", "odoo", "n8n", "stripe"]
+    tier_3: ["openai", "anthropic", "google"]
+    tier_4: ["slack", "twilio", "whatsapp", "mailgun"]
+    tier_5: ["linear", "notion"]
+    tier_6: ["blogbowl-filesystem", "callcenter-conversation", "callcenter-speech"]
+    total: 18
+  
+  writer-copilot:
+    tier_1: ["github", "vault", "supabase"]
+    tier_3: ["context7"]
+    tier_6: ["blogbowl-filesystem"]
+    total: 5
+  
+  executor-codex:
+    tier_1: ["github", "vault", "docker", "hostinger"]
+    tier_2: ["n8n"]
+    tier_4: ["slack"]
+    tier_5: ["cloudflare", "aws", "caddy"]
+    tier_6: ["callcenter-conversation"]
+    total: 10
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Health & Monitoring
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+health_checks:
+  interval: "5m"
+  
+  checks:
+    - provider: "vault"
+      command: "vault status"
+      expect: "unsealed"
+      critical: true
+    
+    - provider: "github"
+      command: "gh api /rate_limit"
+      expect: "remaining > 100"
+      critical: false
+    
+    - provider: "hostinger"
+      command: "ssh smarteros 'echo ok'"
+      expect: "ok"
+      critical: true
+    
+    - provider: "supabase"
+      command: "curl -f $SUPABASE_URL/rest/v1/"
+      expect: "200"
+      critical: true
+  
+  on_failure:
+    - notify: "slack"
+    - fallback: "use_cached_data"
+    - retry: "3x exponential"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Usage Patterns
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+patterns:
+  gemini_strategic_planning:
+    reads:
+      - "github: issues with label:auto"
+      - "supabase: user count, active features"
+      - "shopify: order trends, revenue"
+      - "metabase: KPI dashboards"
+      - "slack: recent errors from #alerts"
+    
+    decides: "Which tasks to prioritize and delegate"
+  
+  copilot_code_generation:
+    reads:
+      - "github: current codebase"
+      - "context7: framework docs"
+      - "supabase: database schema"
+    
+    writes: "Code patches to /tmp/smarteros/patches/"
+  
+  codex_execution:
+    reads:
+      - "vault: SSH keys, tokens"
+      - "docker: current containers"
+    
+    executes:
+      - "Apply patches"
+      - "Build apps"
+      - "Sync to VPS"
+      - "Restart services"
+    
+    notifies:
+      - "slack: deployment status"
+      - "github: PR comments"
+
+notes: |
+  Este registry define todos los MCP providers disponibles y
+  cómo se asignan a los tres agentes del sistema.
+  
+  Tier 1 (core) debe estar siempre disponible.
+  Tiers 2-5 tienen fallbacks si no están disponibles.
+  
+  Actualizar cuando:
+  - Se agregue un nuevo MCP provider
+  - Cambien los límites de rate (basado en uso real)
+  - Se optimicen patrones de acceso

@@ -1,0 +1,38 @@
+service:
+  id: mkt-smarterbot
+  name: mkt.smarterbot.cl
+  version: "1.0"
+  tier: 6
+  category: marketing
+  subdomain: mkt.smarterbot.cl
+
+technology:
+  framework: BlogBowl (Next.js)
+  repo: https://github.com/BlogBowl/BlogBowl
+  runtime: Node.js 20
+  port: 3010
+
+auth:
+  provider: supabase
+  shared_session: true
+  origins:
+    - https://app.smarterbot.cl
+    - https://mkt.smarterbot.cl
+
+mcp_providers:
+  - blogbowl-filesystem
+
+deployment:
+  method: docker-compose
+  compose_file: dkcompose/docker-compose.mkt-call.yml
+  container_name: mkt-blogbowl
+  proxy: traefik
+  ssl: letsencrypt
+
+environment:
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+notes: |
+  Servicio de marketing de contenido integrado con login compartido vía Supabase.
+  Los agentes pueden leer/editar contenido mediante MCP filesystem.
