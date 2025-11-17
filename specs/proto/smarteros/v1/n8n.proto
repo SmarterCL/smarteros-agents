@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package smarteros.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/SmarterCL/SmarterOS/gen/go/smarteros/v1;smarter osv1";
+
+// N8NService handles workflow automation via N8N + Redpanda
+service N8NService {
+  // Trigger workflow execution
+  rpc TriggerWorkflow(TriggerWorkflowRequest) returns (TriggerWorkflowResponse);
+  
+  // Get workflow execution status
+  rpc GetExecution(GetExecutionRequest) returns (GetExecutionResponse);
+  
+  // List available workflows
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
+  
+  // Create automation trigger
+  rpc CreateTrigger(CreateTriggerRequest) returns (CreateTriggerResponse);
+}
+
+message TriggerWorkflowRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string workflow_id = 2 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Struct input_data = 3;
+  TriggerSource source = 4;
+}
+
+enum TriggerSource {
+  TRIGGER_SOURCE_UNSPECIFIED = 0;
+  TRIGGER_SOURCE_WEBHOOK = 1;
+  TRIGGER_SOURCE_KAFKA = 2;
+  TRIGGER_SOURCE_SCHEDULE = 3;
+  TRIGGER_SOURCE_MANUAL = 4;
+  TRIGGER_SOURCE_MCP_AGENT = 5;
+}
+
+message TriggerWorkflowResponse {
+  string execution_id = 1;
+  string workflow_id = 2;
+  ExecutionStatus status = 3;
+  string kafka_topic = 4;
+  int64 kafka_offset = 5;
+  google.protobuf.Timestamp triggered_at = 6;
+}
+
+enum ExecutionStatus {
+  EXECUTION_STATUS_UNSPECIFIED = 0;
+  EXECUTION_STATUS_QUEUED = 1;
+  EXECUTION_STATUS_RUNNING = 2;
+  EXECUTION_STATUS_SUCCESS = 3;
+  EXECUTION_STATUS_ERROR = 4;
+  EXECUTION_STATUS_CANCELLED = 5;
+}
+
+message GetExecutionRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string execution_id = 2 [(buf.validate.field).string.min_len = 1];
+  bool include_logs = 3;
+}
+
+message GetExecutionResponse {
+  string execution_id = 1;
+  string workflow_id = 2;
+  ExecutionStatus status = 3;
+  google.protobuf.Struct input_data = 4;
+  google.protobuf.Struct output_data = 5;
+  repeated ExecutionLog logs = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp finished_at = 8;
+  int32 duration_ms = 9;
+}
+
+message ExecutionLog {
+  string node_name = 1;
+  string message = 2;
+  string level = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message ListWorkflowsRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  bool active_only = 2;
+  int32 limit = 3 [(buf.validate.field).int32 = {gte: 1, lte: 100}];
+  int32 offset = 4;
+}
+
+message ListWorkflowsResponse {
+  repeated Workflow workflows = 1;
+  int32 total_count = 2;
+}
+
+message Workflow {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  bool active = 4;
+  repeated string tags = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message CreateTriggerRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string workflow_id = 2 [(buf.validate.field).string.min_len = 1];
+  TriggerType type = 3;
+  google.protobuf.Struct config = 4;
+}
+
+enum TriggerType {
+  TRIGGER_TYPE_UNSPECIFIED = 0;
+  TRIGGER_TYPE_KAFKA_TOPIC = 1;
+  TRIGGER_TYPE_WEBHOOK = 2;
+  TRIGGER_TYPE_CRON = 3;
+  TRIGGER_TYPE_EVENT = 4;
+}
+
+message CreateTriggerResponse {
+  string trigger_id = 1;
+  string workflow_id = 2;
+  TriggerType type = 3;
+  bool active = 4;
+  string kafka_consumer_group = 5;
+}

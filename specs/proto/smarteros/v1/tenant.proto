@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package smarteros.v1;
+
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/SmarterCL/SmarterOS/gen/go/smarteros/v1;smarterosv1";
+
+// TenantService handles multi-tenant operations
+service TenantService {
+  // Create new tenant
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse);
+  
+  // Get tenant details
+  rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
+  
+  // Update tenant configuration
+  rpc UpdateTenant(UpdateTenantRequest) returns (UpdateTenantResponse);
+  
+  // Provision tenant resources
+  rpc ProvisionResources(ProvisionResourcesRequest) returns (ProvisionResourcesResponse);
+  
+  // Get tenant metrics
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+}
+
+message CreateTenantRequest {
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string organization = 2;
+  string contact_email = 3 [(buf.validate.field).string.email = true];
+  TenantPlan plan = 4;
+  TenantRegion region = 5;
+}
+
+enum TenantPlan {
+  TENANT_PLAN_UNSPECIFIED = 0;
+  TENANT_PLAN_DEMO = 1;
+  TENANT_PLAN_STARTER = 2;
+  TENANT_PLAN_BUSINESS = 3;
+  TENANT_PLAN_ENTERPRISE = 4;
+}
+
+enum TenantRegion {
+  TENANT_REGION_UNSPECIFIED = 0;
+  TENANT_REGION_CHILE = 1;
+  TENANT_REGION_LATAM = 2;
+  TENANT_REGION_US = 3;
+  TENANT_REGION_EU = 4;
+}
+
+message CreateTenantResponse {
+  string tenant_id = 1;
+  string name = 2;
+  TenantStatus status = 3;
+  string kafka_topic_prefix = 4;
+  string vault_namespace = 5;
+  string supabase_project_ref = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+enum TenantStatus {
+  TENANT_STATUS_UNSPECIFIED = 0;
+  TENANT_STATUS_PROVISIONING = 1;
+  TENANT_STATUS_ACTIVE = 2;
+  TENANT_STATUS_SUSPENDED = 3;
+  TENANT_STATUS_DELETED = 4;
+}
+
+message GetTenantRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetTenantResponse {
+  string tenant_id = 1;
+  string name = 2;
+  string organization = 3;
+  string contact_email = 4;
+  TenantPlan plan = 5;
+  TenantRegion region = 6;
+  TenantStatus status = 7;
+  ResourceLimits limits = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message ResourceLimits {
+  int32 max_workflows = 1;
+  int32 max_mcp_servers = 2;
+  int32 max_kafka_topics = 3;
+  int64 max_storage_bytes = 4;
+  int32 max_api_calls_per_day = 5;
+}
+
+message UpdateTenantRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  optional string name = 2;
+  optional string organization = 3;
+  optional string contact_email = 4;
+  optional TenantPlan plan = 5;
+  optional TenantStatus status = 6;
+}
+
+message UpdateTenantResponse {
+  string tenant_id = 1;
+  bool success = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+message ProvisionResourcesRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  repeated ResourceType resources = 2;
+}
+
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  RESOURCE_TYPE_KAFKA_TOPICS = 1;
+  RESOURCE_TYPE_VAULT_SECRETS = 2;
+  RESOURCE_TYPE_SUPABASE_PROJECT = 3;
+  RESOURCE_TYPE_N8N_INSTANCE = 4;
+  RESOURCE_TYPE_MCP_NAMESPACE = 5;
+}
+
+message ProvisionResourcesResponse {
+  repeated ProvisionedResource resources = 1;
+  bool all_successful = 2;
+  google.protobuf.Timestamp provisioned_at = 3;
+}
+
+message ProvisionedResource {
+  ResourceType type = 1;
+  string resource_id = 2;
+  string connection_string = 3;
+  bool success = 4;
+  string error_message = 5;
+}
+
+message GetMetricsRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+}
+
+message GetMetricsResponse {
+  int32 total_api_calls = 1;
+  int64 storage_used_bytes = 2;
+  int32 active_workflows = 3;
+  int32 active_mcp_servers = 4;
+  int32 kafka_messages_produced = 5;
+  int32 kafka_messages_consumed = 6;
+  float avg_response_time_ms = 7;
+  float error_rate = 8;
+}

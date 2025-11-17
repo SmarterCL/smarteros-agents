@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package smarteros.v1;
+
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/SmarterCL/SmarterOS/gen/go/smarteros/v1;smarter osv1";
+
+// WhatsAppService handles WhatsApp messaging operations via Redpanda
+service WhatsAppService {
+  // Send outbound message
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  
+  // Process inbound message
+  rpc ProcessInbound(ProcessInboundRequest) returns (ProcessInboundResponse);
+  
+  // Get conversation history
+  rpc GetConversation(GetConversationRequest) returns (GetConversationResponse);
+  
+  // Create bot response
+  rpc CreateBotResponse(CreateBotResponseRequest) returns (CreateBotResponseResponse);
+}
+
+message SendMessageRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string to = 2 [(buf.validate.field).string.pattern = "^\\+[1-9]\\d{1,14}$"];
+  string message = 3 [(buf.validate.field).string.min_len = 1];
+  MessageType type = 4;
+  optional string media_url = 5;
+}
+
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  MESSAGE_TYPE_TEXT = 1;
+  MESSAGE_TYPE_IMAGE = 2;
+  MESSAGE_TYPE_DOCUMENT = 3;
+  MESSAGE_TYPE_AUDIO = 4;
+  MESSAGE_TYPE_VIDEO = 5;
+}
+
+message SendMessageResponse {
+  string message_id = 1;
+  string kafka_topic = 2;
+  int64 kafka_offset = 3;
+  MessageStatus status = 4;
+  google.protobuf.Timestamp sent_at = 5;
+}
+
+enum MessageStatus {
+  MESSAGE_STATUS_UNSPECIFIED = 0;
+  MESSAGE_STATUS_QUEUED = 1;
+  MESSAGE_STATUS_SENT = 2;
+  MESSAGE_STATUS_DELIVERED = 3;
+  MESSAGE_STATUS_READ = 4;
+  MESSAGE_STATUS_FAILED = 5;
+}
+
+message ProcessInboundRequest {
+  string tenant_id = 1;
+  string from = 2 [(buf.validate.field).string.pattern = "^\\+[1-9]\\d{1,14}$"];
+  string message = 3;
+  MessageType type = 4;
+  google.protobuf.Timestamp received_at = 5;
+}
+
+message ProcessInboundResponse {
+  string conversation_id = 1;
+  bool requires_bot_response = 2;
+  string kafka_topic = 3;
+  int64 kafka_offset = 4;
+}
+
+message GetConversationRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string phone_number = 2 [(buf.validate.field).string.pattern = "^\\+[1-9]\\d{1,14}$"];
+  int32 limit = 3 [(buf.validate.field).int32 = {gte: 1, lte: 100}];
+}
+
+message GetConversationResponse {
+  string conversation_id = 1;
+  repeated Message messages = 2;
+  int32 total_count = 3;
+}
+
+message Message {
+  string id = 1;
+  string from = 2;
+  string to = 3;
+  string content = 4;
+  MessageType type = 5;
+  MessageStatus status = 6;
+  bool is_bot = 7;
+  google.protobuf.Timestamp timestamp = 8;
+}
+
+message CreateBotResponseRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string conversation_id = 2;
+  string user_message = 3;
+  string context = 4;
+}
+
+message CreateBotResponseResponse {
+  string response_text = 1;
+  string message_id = 2;
+  bool sent = 3;
+  string kafka_topic = 4;
+}

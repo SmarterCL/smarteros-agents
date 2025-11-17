@@ -1,0 +1,52 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/SmarterCL/SmarterOS/gen/go
+plugins:
+  # Standard protobuf Go generation
+  - remote: buf.build/protocolbuffers/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  
+  # gRPC Go generation
+  - remote: buf.build/grpc/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  
+  # protoc-gen-go-mcp - Auto-generates MCP servers from gRPC services
+  - local:
+      - go
+      - run
+      - github.com/redpanda-data/protoc-gen-go-mcp/cmd/protoc-gen-go-mcp@latest
+    out: gen/go
+    opt:
+      - paths=source_relative
+      - package_suffix=mcp
+  
+  # Connect-RPC (optional - for HTTP/2 bidirectional streaming)
+  - remote: buf.build/connectrpc/go
+    out: gen/go
+    opt:
+      - paths=source_relative
+  
+  # TypeScript generation (for Next.js apps)
+  - remote: buf.build/connectrpc/es:v1.4.0
+    out: gen/ts
+    opt:
+      - target=ts
+  
+  # Python generation (for N8N custom nodes)
+  - remote: buf.build/protocolbuffers/python
+    out: gen/python
+    opt:
+      - pyi_out=gen/python
+  
+  # Go Validator (protovalidate)
+  - remote: buf.build/bufbuild/protovalidate-go
+    out: gen/go
+    opt:
+      - paths=source_relative

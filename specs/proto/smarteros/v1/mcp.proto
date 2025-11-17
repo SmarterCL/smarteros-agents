@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package smarteros.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/SmarterCL/SmarterOS/gen/go/smarteros/v1;smarterosv1";
+
+// MCPAgentService handles MCP agent operations and orchestration
+service MCPAgentService {
+  // Execute MCP tool
+  rpc ExecuteTool(ExecuteToolRequest) returns (ExecuteToolResponse);
+  
+  // List available tools
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+  
+  // Create agent session
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  
+  // Get agent telemetry
+  rpc GetTelemetry(GetTelemetryRequest) returns (GetTelemetryResponse);
+  
+  // Register new MCP server
+  rpc RegisterMCPServer(RegisterMCPServerRequest) returns (RegisterMCPServerResponse);
+}
+
+message ExecuteToolRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string tool_name = 2 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Struct arguments = 3;
+  string session_id = 4;
+  string mcp_server_id = 5;
+}
+
+message ExecuteToolResponse {
+  string execution_id = 1;
+  google.protobuf.Struct result = 2;
+  bool success = 3;
+  string error_message = 4;
+  int32 duration_ms = 5;
+  string kafka_topic = 6;
+  int64 kafka_offset = 7;
+  google.protobuf.Timestamp executed_at = 8;
+}
+
+message ListToolsRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string mcp_server_id = 2;
+  bool include_schemas = 3;
+}
+
+message ListToolsResponse {
+  repeated Tool tools = 1;
+  int32 total_count = 2;
+}
+
+message Tool {
+  string name = 1;
+  string description = 2;
+  string mcp_server_id = 3;
+  google.protobuf.Struct input_schema = 4;
+  repeated string capabilities = 5;
+  bool active = 6;
+}
+
+message CreateSessionRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string user_id = 2;
+  SessionType type = 3;
+  google.protobuf.Struct context = 4;
+}
+
+enum SessionType {
+  SESSION_TYPE_UNSPECIFIED = 0;
+  SESSION_TYPE_INTERACTIVE = 1;
+  SESSION_TYPE_AUTOMATION = 2;
+  SESSION_TYPE_BATCH = 3;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message GetTelemetryRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  string mcp_server_id = 4;
+}
+
+message GetTelemetryResponse {
+  int32 total_executions = 1;
+  int32 successful_executions = 2;
+  int32 failed_executions = 3;
+  int32 avg_duration_ms = 4;
+  repeated ToolUsage tool_usage = 5;
+  string kafka_consumer_lag = 6;
+}
+
+message ToolUsage {
+  string tool_name = 1;
+  int32 execution_count = 2;
+  int32 avg_duration_ms = 3;
+  float success_rate = 4;
+}
+
+message RegisterMCPServerRequest {
+  string tenant_id = 1 [(buf.validate.field).string.min_len = 1];
+  string name = 2 [(buf.validate.field).string.min_len = 1];
+  string description = 3;
+  ServerProtocol protocol = 4;
+  string connection_string = 5;
+  google.protobuf.Struct credentials = 6;
+  repeated string capabilities = 7;
+}
+
+enum ServerProtocol {
+  SERVER_PROTOCOL_UNSPECIFIED = 0;
+  SERVER_PROTOCOL_STDIO = 1;
+  SERVER_PROTOCOL_SSE = 2;
+  SERVER_PROTOCOL_GRPC = 3;
+}
+
+message RegisterMCPServerResponse {
+  string mcp_server_id = 1;
+  string name = 2;
+  bool active = 3;
+  google.protobuf.Timestamp registered_at = 4;
+  string vault_secret_path = 5;
+}

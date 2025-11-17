@@ -1,0 +1,16 @@
+version: v2
+modules:
+  - path: specs/proto
+name: buf.build/smartercl/smarteros
+deps:
+  - buf.build/googleapis/googleapis
+  - buf.build/bufbuild/protovalidate
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT
+  except:
+    - PACKAGE_VERSION_SUFFIX
+    - SERVICE_SUFFIX
