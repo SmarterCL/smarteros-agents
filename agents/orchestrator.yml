@@ -1,0 +1,367 @@
+# 🎭 Orchestrator — Coordinador Tri-Agente SmarterOS
+
+version: "1.0"
+orchestrator:
+  name: "smarteros-tri-agent"
+  agents:
+    - director-gemini
+    - writer-copilot
+    - executor-codex
+  
+  mode: "sequential-with-feedback"
+  description: "Coordina flujo: Gemini planea → Copilot escribe → Codex ejecuta → Gemini valida"
+
+triggers:
+  - name: "git_push"
+    event: "github.push"
+    branches: ["main", "develop"]
+    paths:
+      - "app.smarterbot.cl/**"
+      - "smarterbot.cl/**"
+      - "smarteros-specs/**"
+    
+    flow:
+      - agent: "director-gemini"
+        action: "analyze_diff"
+        output: "execution_plan"
+      
+      - agent: "writer-copilot"
+        condition: "plan.requires_code_changes"
+        action: "generate_patches"
+        input: "execution_plan"
+        output: "code_patches"
+      
+      - agent: "executor-codex"
+        condition: "patches.length > 0"
+        action: "apply_and_deploy"
+        input: "code_patches"
+        output: "execution_report"
+      
+      - agent: "director-gemini"
+        action: "validate_results"
+        input: "execution_report"
+        output: "feedback"
+  
+  - name: "github_issue"
+    event: "github.issues.opened"
+    labels: ["auto", "enhancement", "bug"]
+    
+    flow:
+      - agent: "director-gemini"
+        action: "analyze_issue"
+        context:
+          - "issue body"
+          - "related issues"
+          - "current codebase"
+        output: "execution_plan"
+      
+      - agent: "writer-copilot"
+        action: "generate_solution"
+        input: "execution_plan"
+        output: "code_patches + tests"
+      
+      - agent: "executor-codex"
+        action: "apply_test_deploy"
+        input: "code_patches"
+        output: "execution_report"
+      
+      - agent: "director-gemini"
+        action: "comment_on_issue"
+        input: "execution_report"
+        actions:
+          - "Add solution summary"
+          - "Link to PR if created"
+          - "Close if auto-resolved"
+  
+  - name: "scheduled_maintenance"
+    event: "cron"
+    schedule: "0 2 * * *"  # Daily at 2 AM UTC
+    
+    flow:
+      - agent: "director-gemini"
+        action: "system_health_check"
+        checks:
+          - "dependency_updates_available"
+          - "logs_with_errors"
+          - "performance_degradation"
+          - "security_vulnerabilities"
+        output: "maintenance_plan"
+      
+      - agent: "writer-copilot"
+        condition: "maintenance_plan.has_actions"
+        action: "generate_fixes"
+        input: "maintenance_plan"
+        output: "code_patches"
+      
+      - agent: "executor-codex"
+        condition: "patches.length > 0"
+        action: "apply_and_test"
+        input: "code_patches"
+        output: "execution_report"
+      
+      - agent: "director-gemini"
+        action: "generate_maintenance_report"
+        input: "execution_report"
+        delivery: ["slack", "github_issue"]
+  
+  - name: "manual_task"
+    event: "cli"
+    command: "./orchestrate.sh"
+    
+    flow:
+      - agent: "director-gemini"
+        action: "parse_user_intent"
+        input: "cli_args"
+        output: "execution_plan"
+      
+      - agent: "writer-copilot"
+        condition: "plan.requires_code"
+        action: "generate_code"
+        input: "execution_plan"
+        output: "code_patches"
+      
+      - agent: "executor-codex"
+        action: "execute_plan"
+        input: "code_patches OR direct_commands"
+        output: "execution_report"
+      
+      - agent: "director-gemini"
+        action: "format_human_response"
+        input: "execution_report"
+        output: "terminal_message"
+
+communication:
+  protocol: "json-over-files"
+  paths:
+    plans: "/tmp/smarteros/plans/"
+    patches: "/tmp/smarteros/patches/"
+    reports: "/tmp/smarteros/reports/"
+  
+  message_format:
+    envelope:
+      timestamp: "iso8601"
+      from: "agent_name"
+      to: "agent_name"
+      type: "plan|patch|report|feedback"
+      correlation_id: "uuid"
+    
+    payload: "agent-specific schema"
+
+state_management:
+  persistence:
+    - location: "vault:smarteros/agents/orchestrator-state"
+      includes:
+        - "active_workflows"
+        - "last_execution"
+        - "pending_tasks"
+      ttl: "30d"
+    
+    - location: "github:smarteros-specs/agents/orchestrator-state.yml"
+      includes:
+        - "metrics_summary"
+        - "success_rate"
+        - "common_patterns"
+      update: "daily"
+  
+  recovery:
+    checkpoint_frequency: "per_step"
+    on_failure:
+      - "Save current state"
+      - "Notify director-gemini"
+      - "Attempt resume from last checkpoint"
+      - "If resume fails 3x → abort and alert"
+
+coordination:
+  patterns:
+    sequential:
+      description: "Gemini → Copilot → Codex → Gemini (feedback)"
+      use_case: "Feature development, bug fixes"
+      max_iterations: 3
+    
+    parallel:
+      description: "Multiple Copilot tasks → aggregate → Codex batch"
+      use_case: "Refactoring multiple files"
+      coordination: "director-gemini"
+    
+    iterative:
+      description: "Gemini → (Copilot → Codex → validate)* → Gemini final"
+      use_case: "Complex features with multiple attempts"
+      max_iterations: 5
+  
+  conflict_resolution:
+    - scenario: "Codex fails validation"
+      action: "Gemini re-plans, Copilot regenerates"
+    
+    - scenario: "Copilot produces invalid code"
+      action: "Codex reports error, Gemini requests fix"
+    
+    - scenario: "Gemini plan is ambiguous"
+      action: "Codex requests clarification, Gemini refines"
+
+monitoring:
+  metrics:
+    - name: "workflows_executed"
+      type: "counter"
+      labels: ["trigger", "success"]
+    
+    - name: "workflow_duration"
+      type: "histogram"
+      unit: "seconds"
+      labels: ["trigger", "stage"]
+    
+    - name: "agent_handoffs"
+      type: "counter"
+      labels: ["from_agent", "to_agent"]
+    
+    - name: "iterations_required"
+      type: "histogram"
+      labels: ["trigger"]
+    
+    - name: "validation_failures"
+      type: "counter"
+      labels: ["stage", "reason"]
+  
+  health_check:
+    endpoint: "/health/orchestrator"
+    interval: "30s"
+    checks:
+      - "all_agents_responsive"
+      - "vault_accessible"
+      - "github_api_reachable"
+      - "disk_space_sufficient"
+
+notifications:
+  channels:
+    slack:
+      webhook: "vault:smarteros/mcp/slack:webhook_url"
+      events:
+        - "workflow_started"
+        - "workflow_completed"
+        - "workflow_failed"
+        - "manual_approval_required"
+      
+      format: |
+        🤖 *SmarterOS Tri-Agent*
+        Workflow: {workflow_name}
+        Status: {status}
+        Duration: {duration}
+        Details: {summary}
+    
+    github:
+      events:
+        - "issue_resolution"
+        - "pr_creation"
+        - "deployment_complete"
+      
+      format: |
+        ## 🤖 Tri-Agent Report
+        
+        **Workflow**: {workflow_name}
+        **Triggered by**: {trigger}
+        **Status**: {status}
+        
+        ### Changes
+        {changes_summary}
+        
+        ### Validation
+        {validation_results}
+    
+    linear:
+      mcp: "linear"
+      events:
+        - "task_completed"
+        - "roadmap_update"
+
+security:
+  permissions:
+    orchestrator:
+      read: ["all agents", "vault:smarteros/**", "github:*"]
+      write: ["vault:smarteros/agents/orchestrator-*", "/tmp/smarteros/**"]
+      execute: ["spawn_agents", "terminate_agents"]
+  
+  audit:
+    enabled: true
+    log_path: "/var/log/smarteros/orchestrator.log"
+    includes:
+      - "all_workflows"
+      - "agent_communications"
+      - "state_changes"
+      - "errors"
+
+examples:
+  - trigger: "git_push"
+    scenario: "User pushes new component to main"
+    
+    execution:
+      - stage: "analyze"
+        agent: "director-gemini"
+        input: "git diff main~1..main"
+        output:
+          tasks:
+            - id: "new-component"
+              type: "code"
+              files: ["components/new-widget.tsx"]
+        duration: "5s"
+      
+      - stage: "generate"
+        agent: "writer-copilot"
+        input: "execution_plan"
+        output:
+          patches: []  # No patches needed, new file already committed
+        duration: "0s"
+        skip_reason: "no_code_generation_needed"
+      
+      - stage: "deploy"
+        agent: "executor-codex"
+        input: "direct_deploy"
+        actions:
+          - "pnpm build"
+          - "./sync-smarteros.sh app"
+          - "ssh smarteros 'sudo systemctl restart smarteros-app'"
+        output:
+          success: true
+          deployed_files: 1
+        duration: "3m"
+      
+      - stage: "validate"
+        agent: "director-gemini"
+        input: "execution_report"
+        checks:
+          - health_check: "pass"
+          - logs_clean: "pass"
+          - response_time: "pass"
+        output:
+          status: "success"
+          feedback: "Deployment successful, no issues detected"
+        duration: "10s"
+    
+    total_duration: "3m15s"
+    result: "success"
+
+configuration:
+  timeouts:
+    director_analysis: "2m"
+    writer_generation: "5m"
+    executor_deployment: "15m"
+    validation: "5m"
+    total_workflow: "30m"
+  
+  retries:
+    max_attempts: 3
+    backoff: "exponential"
+    initial_delay: "5s"
+  
+  concurrency:
+    max_parallel_workflows: 3
+    max_parallel_agents: 10
+
+notes: |
+  El orchestrator es el "director de orquesta". Coordina los tres agentes
+  y gestiona el flujo de información entre ellos.
+  
+  No tiene lógica de negocio propia, solo coordinación y estado.
+  
+  Actualizar este spec cuando:
+  - Se agreguen nuevos triggers
+  - Cambien patrones de coordinación
+  - Se optimicen timeouts basados en métricas reales

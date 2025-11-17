@@ -1,0 +1,362 @@
+# Hostinger API MCP Provider Configuration
+# Official MCP Server: https://github.com/hostinger/api-mcp-server
+
+provider: "hostinger"
+category: "core"
+tier: 1
+status: "active"
+
+mcp_server:
+  name: "hostinger-api-mcp"
+  repository: "https://github.com/hostinger/api-mcp-server"
+  npm_package: "hostinger-api-mcp"
+  version: "latest"
+  description: "Official Model Context Protocol server for Hostinger API with 100+ management tools"
+
+install:
+  global: "npm install -g hostinger-api-mcp"
+  verification: "which hostinger-api-mcp"
+
+config:
+  command: "hostinger-api-mcp"
+  env:
+    DEBUG: "false"
+    API_TOKEN: "vault:smarteros/mcp/hostinger:api_token"
+  
+  # Claude Desktop / MCP config
+  mcp_config: |
+    {
+      "mcpServers": {
+        "hostinger-api": {
+          "command": "hostinger-api-mcp",
+          "env": {
+            "DEBUG": "false",
+            "API_TOKEN": "<vault_secret>"
+          }
+        }
+      }
+    }
+
+auth:
+  method: "bearer-token"
+  vault_path: "smarteros/mcp/hostinger"
+  
+  secrets:
+    - name: "api_token"
+      type: "string"
+      description: "Bearer token from Hostinger hPanel"
+      required: true
+      get_from: "https://hpanel.hostinger.com/api-tokens"
+      format: "Bearer <token>"
+      note: "Create in hPanel → Profile → API Tokens"
+    
+    - name: "endpoint"
+      type: "string"
+      description: "Base URL of Hostinger API"
+      default: "https://api.hostinger.com"
+      required: false
+
+capabilities:
+  # Billing & Payment Management
+  billing:
+    - billing_getPaymentMethodsV1        # List payment methods
+    - billing_setDefaultPaymentMethodV1   # Set default payment method
+    - billing_deletePaymentMethodV1       # Delete payment method
+    - billing_disableAutoRenewalV1        # Disable auto-renewal for subscription
+    - billing_enableAutoRenewalV1         # Enable auto-renewal for subscription
+  
+  # Domain Management
+  domains:
+    - domains_checkDomainAvailabilityV1   # Check if domains are available
+    - domains_getDomainListV1             # List all domains
+    - domains_getDomainDetailsV1          # Get domain details
+    - domains_updateDomainNameserversV1   # Update nameservers
+    - domains_enablePrivacyProtectionV1   # Enable WHOIS privacy
+    - domains_disablePrivacyProtectionV1  # Disable WHOIS privacy
+    - domains_getDomainForwardingV1       # Get domain forwarding config
+    - domains_createDomainForwardingV1    # Create domain redirect
+    - domains_deleteDomainForwardingV1    # Delete domain redirect
+    - domains_createWHOISProfileV1        # Create WHOIS contact profile
+    - domains_getWHOISProfileUsageV1      # Get WHOIS profile usage
+  
+  # Hosting Management
+  hosting:
+    - hosting_listWebsitesV1              # List websites
+    - hosting_createWebsiteV1             # Create new website
+    - hosting_importWordpressWebsite      # Import WordPress site
+    - hosting_getOrdersV1                 # List hosting orders
+  
+  # VPS Lifecycle Management
+  vps_lifecycle:
+    - VPS_getVirtualMachinesV1            # List all VPS instances
+    - VPS_getVirtualMachineDetailsV1      # Get VPS details
+    - VPS_startVirtualMachineV1           # Start VPS
+    - VPS_stopVirtualMachineV1            # Stop VPS
+    - VPS_rebootVirtualMachineV1          # Reboot VPS
+    - VPS_recreateVirtualMachineV1        # Recreate VPS (reinstall OS)
+    - VPS_setRootPasswordV1               # Change root password
+    - VPS_purchaseNewVirtualMachineV1     # Purchase new VPS
+    - VPS_setupPurchasedVirtualMachineV1  # Setup newly purchased VPS
+    - VPS_getActionsV1                    # Get VPS action history
+  
+  # VPS SSH Keys Management
+  vps_ssh_keys:
+    - VPS_getPublicKeysV1                 # List SSH keys in account
+    - VPS_createPublicKeyV1               # Create new SSH key
+    - VPS_deletePublicKeyV1               # Delete SSH key from account
+    - VPS_attachPublicKeyV1               # Attach SSH key to VPS
+    - VPS_getAttachedPublicKeysV1         # List keys attached to VPS
+  
+  # VPS Firewall Management
+  vps_firewall:
+    - VPS_listFirewallsV1                 # List all firewalls
+    - VPS_activateFirewallV1              # Activate firewall on VPS
+    - VPS_deactivateFirewallV1            # Deactivate firewall
+  
+  # VPS Backup Management
+  vps_backups:
+    - VPS_getBackupsV1                    # List VPS backups
+    - VPS_createBackupV1                  # Create backup
+    - VPS_restoreBackupV1                 # Restore from backup
+  
+  # VPS Docker Management
+  vps_docker:
+    - VPS_getProjectsV1                   # List Docker projects
+    - VPS_createProjectV1                 # Create Docker project
+    - VPS_updateProjectV1                 # Update Docker project
+  
+  # VPS Network Configuration
+  vps_network:
+    - VPS_setNameserversV1                # Set custom DNS resolvers
+  
+  # VPS Templates & Data Centers
+  vps_templates:
+    - VPS_getTemplatesV1                  # List OS templates
+    - VPS_getTemplateDetailsV1            # Get template details
+    - VPS_getDataCenterListV1             # List data centers
+  
+  # VPS Scripts
+  vps_scripts:
+    - VPS_getPostInstallScriptsV1         # List post-install scripts
+    - VPS_createPostInstallScriptV1       # Create post-install script
+  
+  # Email Marketing (Reach)
+  email_marketing:
+    - reach_createContactV1               # Create email contact
+    - reach_deleteAContactV1              # Delete email contact
+
+agent_usage:
+  executor-codex:
+    primary: true
+    use_cases:
+      - "VPS lifecycle operations (start, stop, reboot)"
+      - "Create and manage SSH keys via API"
+      - "Firewall configuration"
+      - "Backup creation and restoration"
+      - "Docker project management on VPS"
+      - "Set custom DNS resolvers"
+    
+    typical_workflows:
+      - name: "Deploy new app version"
+        steps:
+          - "Stop VPS if needed (VPS_stopVirtualMachineV1)"
+          - "Create backup first (VPS_createBackupV1)"
+          - "Restart VPS (VPS_rebootVirtualMachineV1)"
+      
+      - name: "Setup SSH access"
+        steps:
+          - "Create SSH key via API (VPS_createPublicKeyV1)"
+          - "Attach key to VPS (VPS_attachPublicKeyV1)"
+          - "Verify attachment (VPS_getAttachedPublicKeysV1)"
+  
+  director-gemini:
+    primary: false
+    use_cases:
+      - "Check domain availability before purchase"
+      - "Manage domain privacy settings"
+      - "Configure domain forwarding/redirects"
+      - "Query billing information"
+      - "List available VPS templates"
+    
+    typical_workflows:
+      - name: "Setup new domain"
+        steps:
+          - "Check availability (domains_checkDomainAvailabilityV1)"
+          - "Enable privacy protection (domains_enablePrivacyProtectionV1)"
+          - "Configure forwarding if needed (domains_createDomainForwardingV1)"
+  
+  writer-copilot:
+    primary: false
+    use_cases:
+      - "List websites for documentation"
+      - "Create new websites"
+      - "Import WordPress sites"
+    
+    typical_workflows:
+      - name: "Document infrastructure"
+        steps:
+          - "List all websites (hosting_listWebsitesV1)"
+          - "List VPS instances (VPS_getVirtualMachinesV1)"
+          - "Generate infrastructure docs"
+
+connection_test:
+  tool: "VPS_getVirtualMachinesV1"
+  expected: "Lista de VPS instances registrados en cuenta Hostinger"
+  success_pattern: "data[].id"
+  failure_action: "Verificar API_TOKEN en vault:smarteros/mcp/hostinger"
+
+rate_limits:
+  default: "Not documented in official repo"
+  note: "Hostinger API may have rate limits, monitor for 429 responses"
+
+error_handling:
+  - code: 401
+    message: "Unauthorized"
+    action: "Check API_TOKEN is valid and not expired"
+  
+  - code: 403
+    message: "Forbidden"
+    action: "Verify API token has required permissions"
+  
+  - code: 404
+    message: "Resource not found"
+    action: "Verify resource ID exists (VPS ID, domain, etc)"
+  
+  - code: 429
+    message: "Too many requests"
+    action: "Implement rate limiting and retry with backoff"
+
+documentation:
+  official: "https://github.com/hostinger/api-mcp-server"
+  readme: "https://github.com/hostinger/api-mcp-server/blob/main/README.md"
+  api_docs: "https://api.hostinger.com/docs"
+  hpanel: "https://hpanel.hostinger.com/"
+  api_tokens: "https://hpanel.hostinger.com/api-tokens"
+
+integration:
+  # How this MCP provider integrates with other components
+  
+  vault:
+    path: "smarteros/mcp/hostinger"
+    secrets_required: ["api_token"]
+    secrets_optional: ["endpoint"]
+  
+  agents:
+    codex: "primary"    # Main user for VPS operations
+    gemini: "secondary" # Domain and billing queries
+    copilot: "minimal"  # Website listing
+  
+  complementary_access:
+    ssh:
+      vault_path: "smarteros/ssh/deploy"
+      purpose: "Direct deploy operations (rsync, systemctl)"
+      note: |
+        SSH access is COMPLEMENTARY, not replacement for API MCP.
+        
+        Use SSH (smarteros/ssh/deploy) for:
+        - rsync file deployments
+        - systemctl service control
+        - Direct shell commands
+        - Log file access
+        
+        Use API MCP (smarteros/mcp/hostinger) for:
+        - VPS lifecycle management
+        - SSH keys creation via API
+        - Firewall configuration
+        - Backup management
+        - Domain management
+        - Billing queries
+
+examples:
+  - name: "List all VPS instances"
+    tool: "VPS_getVirtualMachinesV1"
+    params: {}
+    expected: |
+      {
+        "data": [
+          {
+            "id": 123456,
+            "hostname": "smarteros.smarterbot.cl",
+            "ip": "89.116.23.167",
+            "status": "running"
+          }
+        ]
+      }
+  
+  - name: "Create SSH key"
+    tool: "VPS_createPublicKeyV1"
+    params:
+      name: "deploy-key-2025"
+      key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICi2..."
+    expected: |
+      {
+        "data": {
+          "id": 789,
+          "name": "deploy-key-2025"
+        }
+      }
+  
+  - name: "Attach key to VPS"
+    tool: "VPS_attachPublicKeyV1"
+    params:
+      virtualMachineId: 123456
+      ids: [789]
+    expected: |
+      {
+        "message": "Public key attached successfully"
+      }
+  
+  - name: "Check domain availability"
+    tool: "domains_checkDomainAvailabilityV1"
+    params:
+      domain: "newproject"
+      tlds: ["com", "cl", "net"]
+      with_alternatives: false
+    expected: |
+      {
+        "data": {
+          "com": { "available": true, "price": 9.99 },
+          "cl": { "available": false },
+          "net": { "available": true, "price": 12.99 }
+        }
+      }
+
+notes: |
+  ACLARACIÓN CRÍTICA: Análisis Previo Incorrecto
+  
+  El documento MCP-HOSTINGER-REVIEW.md (creado anteriormente) contenía
+  conclusiones INCORRECTAS:
+  
+  ❌ "Hostinger NO es un MCP Provider"
+  ❌ "Solo tiene SSH access, no API"
+  ❌ "No se debe usar smarteros/mcp/hostinger"
+  
+  REALIDAD:
+  
+  ✅ Hostinger SÍ tiene MCP server oficial: hostinger-api-mcp
+  ✅ Tiene 100+ herramientas de management via API REST
+  ✅ El path correcto es: smarteros/mcp/hostinger
+  ✅ SSH access (smarteros/ssh/deploy) es COMPLEMENTARIO
+  
+  Ambos métodos de acceso son válidos y se usan para diferentes propósitos:
+  
+  API MCP (este archivo):
+  - Gestión de VPS (lifecycle, backup, firewall)
+  - Gestión de dominios
+  - Gestión de SSH keys via API
+  - Consultas de billing
+  
+  SSH Directo (smarteros/ssh/deploy):
+  - Deploy de aplicaciones (rsync)
+  - Control de servicios (systemctl)
+  - Comandos shell directos
+  - Acceso a logs
+
+changelog:
+  - date: "2025-11-16"
+    action: "created"
+    reason: "Discovered official hostinger-api-mcp server, correcting previous analysis"
+  
+  - date: "2025-11-16"
+    action: "corrected"
+    reason: "Previous MCP-HOSTINGER-REVIEW.md incorrectly stated Hostinger was not an MCP provider"

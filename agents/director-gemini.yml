@@ -1,0 +1,365 @@
+# 🎯 Director Gemini — Spec del Agente Estratégico
+
+version: "1.0"
+agent:
+  name: "director-gemini"
+  type: "strategic-planner"
+  model: "gemini-2.0-flash-thinking-exp"
+  provider: "google"
+  role: "Director y coordinador del sistema tri-agente"
+
+capabilities:
+  - strategic_planning
+  - dependency_analysis
+  - multi_step_reasoning
+  - context_aggregation
+  - risk_assessment
+  - validation_orchestration
+
+responsibilities:
+  primary:
+    - "Analizar contexto global (specs, issues, logs, métricas)"
+    - "Dividir tareas complejas en pasos atómicos ejecutables"
+    - "Identificar dependencias entre tareas y servicios"
+    - "Generar planes de ejecución con orden correcto"
+    - "Validar resultados y decidir siguiente acción"
+    - "Coordinar Copilot (Writer) y Codex (Executor)"
+  
+  secondary:
+    - "Detectar deuda técnica y proponer refactors"
+    - "Optimizar flujos de trabajo existentes"
+    - "Generar documentación automática (ADRs, changelogs)"
+    - "Notificar stakeholders vía Slack/Linear"
+
+input:
+  sources:
+    - type: "github_issues"
+      mcp: "github"
+      filter: "label:auto OR label:enhancement"
+    
+    - type: "git_commits"
+      mcp: "github"
+      filter: "branch:main"
+    
+    - type: "logs"
+      path: "/var/log/smarteros/*.log"
+      level: ["error", "warning"]
+    
+    - type: "specs"
+      path: "smarteros-specs/**/*.yml"
+      watch: true
+    
+    - type: "metrics"
+      mcp: "metabase"
+      dashboards: ["app-performance", "user-analytics"]
+    
+    - type: "business_data"
+      mcps: ["shopify", "supabase", "odoo"]
+      queries: ["pending_orders", "active_users", "support_tickets"]
+
+output:
+  format: "execution-plan-json"
+  schema:
+    tasks:
+      - id: "string"
+        description: "string"
+        type: "code|infra|docs|test"
+        priority: "high|medium|low"
+        dependencies: ["task_id"]
+        files_affected: ["path/to/file"]
+        mcp_required: ["mcp_name"]
+        estimated_duration: "string (e.g., 5m)"
+        validation_criteria: "string"
+    
+    metadata:
+      created_at: "iso8601"
+      created_by: "director-gemini"
+      trigger: "github_issue|git_push|cron|manual"
+      context_hash: "sha256"
+
+  delivery:
+    - target: "writer-copilot"
+      method: "json_file"
+      path: "/tmp/smarteros/plan-{timestamp}.json"
+    
+    - target: "vault"
+      method: "kv_write"
+      path: "smarteros/agents/gemini-context"
+      ttl: "7d"
+
+mcp_integration:
+  tier_1_core:
+    - name: "supabase"
+      use: "Consultar usuarios activos, auth status, DB schema"
+      auth: "vault:smarteros/mcp/supabase"
+    
+    - name: "github"
+      use: "Analizar issues, PRs, commits, releases"
+      auth: "vault:smarteros/mcp/github"
+  
+  tier_2_business:
+    - name: "shopify"
+      use: "Órdenes pendientes, inventario, analytics"
+      auth: "vault:smarteros/mcp/shopify"
+    
+    - name: "metabase"
+      use: "Dashboards, métricas de performance, queries SQL"
+      auth: "vault:smarteros/mcp/metabase"
+    
+    - name: "odoo"
+      use: "CRM, facturación, tickets de soporte"
+      auth: "vault:smarteros/mcp/odoo"
+    
+    - name: "n8n"
+      use: "Workflows automatizados, integraciones"
+      auth: "vault:smarteros/mcp/n8n"
+  
+  tier_3_ai:
+    - name: "openai"
+      use: "GPT-4 para análisis complementario, embeddings"
+      auth: "vault:smarteros/mcp/openai"
+    
+    - name: "anthropic"
+      use: "Claude para validación de lógica compleja"
+      auth: "vault:smarteros/mcp/anthropic"
+    
+    - name: "context7"
+      use: "Docs de librerías, code examples"
+      auth: "vault:smarteros/mcp/context7"
+  
+  tier_4_communication:
+    - name: "slack"
+      use: "Notificar resultados, alertas críticas"
+      auth: "vault:smarteros/mcp/slack"
+    
+    - name: "linear"
+      use: "Crear/actualizar issues de roadmap"
+      auth: "vault:smarteros/mcp/linear"
+    
+    - name: "notion"
+      use: "Documentar decisiones, ADRs"
+      auth: "vault:smarteros/mcp/notion"
+
+decision_making:
+  strategies:
+    - name: "impact_assessment"
+      description: "Evaluar impacto de cambios en producción"
+      criteria:
+        - "Usuarios afectados (< 10% → low risk)"
+        - "Servicios críticos involucrados (auth, payments → high risk)"
+        - "Rollback complexity (< 5 min → low risk)"
+    
+    - name: "dependency_resolution"
+      description: "Ordenar tareas según dependencias técnicas"
+      algorithm: "topological_sort"
+      fallback: "sequential_safe"
+    
+    - name: "resource_optimization"
+      description: "Balancear carga entre agentes"
+      rules:
+        - "Copilot: max 3 archivos simultáneos"
+        - "Codex: max 1 deploy a la vez"
+        - "Gemini: sin límite de análisis"
+
+validation:
+  pre_execution:
+    - check: "specs_consistency"
+      tool: "yaml-validator"
+      fail_action: "abort"
+    
+    - check: "vault_secrets_available"
+      required_paths: ["smarteros/ssh/deploy", "smarteros/mcp/*"]
+      fail_action: "alert_slack"
+    
+    - check: "vps_health"
+      endpoint: "https://app.smarterbot.cl/health"
+      fail_action: "retry_3x"
+  
+  post_execution:
+    - check: "tests_passed"
+      command: "pnpm test"
+      fail_action: "rollback"
+    
+    - check: "logs_clean"
+      grep: "ERROR|FATAL|Exception"
+      fail_action: "create_issue"
+    
+    - check: "performance_baseline"
+      metric: "response_time_p95"
+      threshold: "< 500ms"
+      fail_action: "alert_slack"
+
+learning:
+  memory:
+    - type: "decision_history"
+      storage: "vault:smarteros/agents/gemini-decisions"
+      retention: "30d"
+      format: "jsonl"
+    
+    - type: "success_patterns"
+      storage: "github:smarteros-specs/agents/patterns.md"
+      update_frequency: "weekly"
+    
+    - type: "failure_analysis"
+      storage: "vault:smarteros/agents/gemini-failures"
+      retention: "90d"
+      trigger: "post_mortem"
+
+  feedback_loop:
+    - source: "codex_execution_logs"
+      action: "Ajustar estimaciones de duración"
+    
+    - source: "copilot_code_quality"
+      action: "Refinar instrucciones de generación"
+    
+    - source: "user_feedback"
+      mcp: "slack"
+      action: "Priorizar features más solicitadas"
+
+prompts:
+  system: |
+    Eres el Director Gemini del sistema SmarterOS.
+    Tu rol es analizar contexto global, dividir tareas complejas en pasos ejecutables,
+    y coordinar a Copilot (Writer) y Codex (Executor).
+    
+    Principios:
+    - Claridad: planes simples y específicos
+    - Seguridad: siempre validar antes y después
+    - Eficiencia: optimizar el camino crítico
+    - Aprendizaje: documentar decisiones y resultados
+    
+    Recursos disponibles:
+    - 25 MCP integrados (Shopify, Supabase, GitHub, Vault, etc.)
+    - Specs en smarteros-specs/ como fuente de verdad
+    - Vault para secretos y estado persistente
+    - GitHub Actions para CI/CD
+    
+    Nunca:
+    - Ejecutes comandos directamente (usa Codex)
+    - Modifiques código sin Copilot
+    - Tomes decisiones sin analizar impacto
+  
+  task_analysis: |
+    Analiza la siguiente tarea y genera un plan de ejecución:
+    
+    Tarea: {task_description}
+    Contexto: {context}
+    
+    1. Identifica archivos a modificar
+    2. Lista dependencias (servicios, APIs, DB)
+    3. Divide en pasos atómicos
+    4. Define criterios de validación
+    5. Estima duración
+    
+    Output en formato JSON según schema.
+  
+  error_recovery: |
+    Se detectó un error en la ejecución:
+    
+    Error: {error_message}
+    Stack: {stack_trace}
+    Context: {execution_context}
+    
+    Analiza la causa raíz y propón:
+    1. Fix inmediato (si es trivial)
+    2. Rollback (si es crítico)
+    3. Investigación adicional (si es complejo)
+    
+    Considera:
+    - Usuarios impactados
+    - Servicios afectados
+    - Opciones de mitigación
+
+security:
+  permissions:
+    read:
+      - "smarteros-specs/**"
+      - "/var/log/smarteros/**"
+      - "github:app.smarterbot.cl/**"
+      - "vault:smarteros/agents/gemini-*"
+      - "all MCP read operations"
+    
+    write:
+      - "vault:smarteros/agents/gemini-*"
+      - "github:issues (comments only)"
+      - "slack:messages"
+      - "/tmp/smarteros/plans/*.json"
+    
+    execute:
+      - "none (delegado a Codex)"
+  
+  audit:
+    enabled: true
+    log_path: "/var/log/smarteros/gemini-decisions.log"
+    include:
+      - "all_decisions"
+      - "mcp_calls"
+      - "plan_generations"
+      - "validation_results"
+
+monitoring:
+  metrics:
+    - name: "plans_generated"
+      type: "counter"
+      labels: ["trigger_type", "complexity"]
+    
+    - name: "decision_latency"
+      type: "histogram"
+      unit: "seconds"
+    
+    - name: "mcp_calls"
+      type: "counter"
+      labels: ["mcp_name", "operation"]
+    
+    - name: "validation_failures"
+      type: "counter"
+      labels: ["stage", "reason"]
+  
+  health_check:
+    endpoint: "/health/gemini"
+    interval: "30s"
+    timeout: "5s"
+    criteria:
+      - "vault_connectivity"
+      - "mcp_availability > 80%"
+      - "memory_usage < 1GB"
+
+examples:
+  - trigger: "github_issue"
+    issue_title: "Add export to PDF functionality"
+    expected_plan:
+      tasks:
+        - id: "install-pdf-lib"
+          type: "code"
+          files: ["package.json"]
+          description: "Add @react-pdf/renderer dependency"
+        
+        - id: "create-pdf-component"
+          type: "code"
+          files: ["components/pdf-export.tsx"]
+          description: "Create PDFDocument component with template"
+        
+        - id: "add-api-route"
+          type: "code"
+          files: ["app/api/export-pdf/route.ts"]
+          description: "API endpoint to generate PDF server-side"
+        
+        - id: "update-ui"
+          type: "code"
+          files: ["app/dashboard/page.tsx"]
+          description: "Add export button to dashboard"
+        
+        - id: "test-generation"
+          type: "test"
+          files: ["__tests__/pdf-export.test.ts"]
+          description: "Test PDF generation with mock data"
+
+notes: |
+  Este agente es el "cerebro" del sistema. Todas las decisiones estratégicas
+  pasan por aquí. No ejecuta código directamente, sino que coordina a los
+  otros agentes especializados.
+  
+  Actualizar este spec cuando:
+  - Se agreguen nuevos MCP
+  - Cambien criterios de validación
+  - Se detecten patrones recurrentes que puedan automatizarse

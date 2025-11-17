@@ -1,0 +1,502 @@
+# 🛠️ Executor Codex — Spec del Agente de Ejecución
+
+version: "1.0"
+agent:
+  name: "executor-codex"
+  type: "execution-engine"
+  model: "codex-cli"
+  provider: "openai"
+  role: "Ejecutor de comandos y aplicador de cambios"
+
+capabilities:
+  - file_operations
+  - command_execution
+  - build_automation
+  - deployment
+  - service_management
+  - validation_execution
+
+responsibilities:
+  primary:
+    - "Aplicar patches generados por Copilot"
+    - "Ejecutar builds (pnpm, docker, next)"
+    - "Sincronizar archivos al VPS (rsync)"
+    - "Gestionar servicios (systemctl, docker compose)"
+    - "Ejecutar validaciones (tests, health checks)"
+    - "Reportar resultados a Gemini"
+  
+  secondary:
+    - "Rollback automático en caso de fallo"
+    - "Gestionar logs y auditoría"
+    - "Limpiar artefactos temporales"
+    - "Monitorear salud de servicios"
+
+input:
+  from_writer:
+    - type: "code_patches"
+      path: "/tmp/smarteros/patches/*.patch"
+      format: "unified_diff"
+    
+    - type: "full_files"
+      path: "/tmp/smarteros/generated/**"
+      action: "copy_to_workspace"
+    
+    - type: "metadata"
+      path: "/tmp/smarteros/patches/*.meta.json"
+      includes:
+        - "files_modified"
+        - "commands_to_run"
+        - "services_to_restart"
+  
+  from_director:
+    - type: "execution_order"
+      format: "json"
+      schema:
+        steps:
+          - id: "string"
+            action: "apply_patch|run_command|sync|restart"
+            params: "object"
+            validation: "string"
+
+output:
+  format: "execution-report"
+  delivery:
+    - target: "director-gemini"
+      method: "json_file"
+      path: "/tmp/smarteros/reports/exec-{timestamp}.json"
+      schema:
+        success: "boolean"
+        steps_completed: "array"
+        steps_failed: "array"
+        logs: "string"
+        metrics:
+          duration: "seconds"
+          files_modified: "number"
+          commands_executed: "number"
+    
+    - target: "vault"
+      method: "kv_write"
+      path: "smarteros/agents/codex-state"
+      ttl: "7d"
+    
+    - target: "logs"
+      method: "append"
+      path: "/var/log/smarteros/codex-executions.log"
+      format: "jsonl"
+
+mcp_integration:
+  tier_1_infra:
+    - name: "docker"
+      use: "Build images, manage containers, compose"
+      auth: "vault:smarteros/mcp/docker"
+      commands:
+        - "docker build"
+        - "docker compose up -d"
+        - "docker ps"
+        - "docker logs"
+    
+    - name: "vault"
+      use: "Leer secretos (SSH keys, env vars, tokens)"
+      auth: "token_from_env"
+      commands:
+        - "vault kv get"
+        - "vault kv list"
+    
+    - name: "hostinger"
+      use: "SSH al VPS, rsync, systemctl remoto"
+      auth: "vault:smarteros/ssh/deploy"
+      commands:
+        - "ssh smarteros"
+        - "rsync -az"
+        - "ssh smarteros 'sudo systemctl restart ...'"
+  
+  tier_2_build:
+    - name: "github"
+      use: "Push tags, crear releases, comentar en PRs"
+      auth: "vault:smarteros/mcp/github"
+      commands:
+        - "gh release create"
+        - "gh pr comment"
+        - "git push --tags"
+
+execution:
+  environments:
+    local:
+      workspace: "/Users/mac/dev/2025"
+      node_version: "20"
+      pnpm_version: "9"
+      tools: ["pnpm", "docker", "rsync", "vault", "ssh"]
+    
+    vps:
+      host: "smarteros"  # SSH alias
+      user: "smarteros"
+      path: "/opt/smarteros"
+      node_version: "20"
+      services: ["smarteros-app", "vault", "caddy"]
+  
+  commands:
+    whitelisted:
+      # Build commands
+      - pattern: "pnpm install"
+        risk: "low"
+        timeout: "5m"
+      
+      - pattern: "pnpm build"
+        risk: "low"
+        timeout: "10m"
+      
+      - pattern: "pnpm test"
+        risk: "low"
+        timeout: "5m"
+      
+      # Docker commands
+      - pattern: "docker build -t *"
+        risk: "medium"
+        timeout: "15m"
+      
+      - pattern: "docker compose up -d"
+        risk: "medium"
+        timeout: "2m"
+        validation: "docker ps | grep healthy"
+      
+      # Sync commands
+      - pattern: "rsync -az * smarteros:*"
+        risk: "high"
+        timeout: "5m"
+        validation: "ssh smarteros 'ls -l *'"
+      
+      - pattern: "./sync-smarteros.sh *"
+        risk: "high"
+        timeout: "5m"
+      
+      # Service management
+      - pattern: "ssh smarteros 'sudo systemctl restart smarteros-app'"
+        risk: "high"
+        timeout: "30s"
+        validation: "curl -f https://app.smarterbot.cl/health"
+      
+      - pattern: "ssh smarteros 'sudo systemctl reload caddy'"
+        risk: "medium"
+        timeout: "10s"
+      
+      # Vault operations
+      - pattern: "vault kv get *"
+        risk: "low"
+        timeout: "5s"
+      
+      - pattern: "vault kv put *"
+        risk: "medium"
+        timeout: "5s"
+        audit: true
+    
+    blacklisted:
+      - "rm -rf /"
+      - "dd if=*"
+      - ":(){ :|:& };:"
+      - "chmod 777 *"
+      - "curl * | bash"
+      - "wget * -O- | sh"
+
+patch_application:
+  strategy: "atomic"
+  steps:
+    - name: "backup"
+      action: "Create git stash or backup dir"
+      on_failure: "abort"
+    
+    - name: "apply"
+      action: "git apply or direct file write"
+      on_failure: "rollback_to_backup"
+    
+    - name: "validate"
+      action: "Run tsc, lint, tests"
+      on_failure: "rollback_to_backup"
+    
+    - name: "commit"
+      action: "git add && git commit"
+      message: "auto: {task_description}"
+      on_failure: "keep_changes_unstaged"
+  
+  rollback:
+    automatic: true
+    triggers:
+      - "compilation_error"
+      - "test_failure"
+      - "health_check_timeout"
+    
+    actions:
+      - "git reset --hard HEAD^"
+      - "Restore backup"
+      - "Sync previous version to VPS"
+      - "Restart services"
+
+deployment:
+  modes:
+    mode_a_rsync_direct:
+      description: "Sync specs/static files directly"
+      use_case: "smarteros-specs, marketing site"
+      steps:
+        - "./sync-smarteros.sh specs"
+      validation: "ssh smarteros 'ls /opt/smarteros/smarteros-specs'"
+    
+    mode_b_build_sync:
+      description: "Build locally, sync artifacts"
+      use_case: "app.smarterbot.cl (Next.js standalone)"
+      steps:
+        - "cd app.smarterbot.cl"
+        - "pnpm install --frozen-lockfile"
+        - "pnpm build"
+        - "./sync-smarteros.sh app"
+        - "ssh smarteros 'sudo systemctl restart smarteros-app'"
+      validation: "curl -f https://app.smarterbot.cl/health"
+    
+    mode_c_docker_compose:
+      description: "Build image, update compose, restart"
+      use_case: "Microservices, workers"
+      steps:
+        - "docker build -t smarteros/{service}:latest ."
+        - "./sync-smarteros.sh compose"
+        - "ssh smarteros 'cd /opt/smarteros && docker compose up -d {service}'"
+      validation: "ssh smarteros 'docker ps | grep {service}'"
+
+validation:
+  pre_execution:
+    - check: "git_clean"
+      command: "git status --porcelain"
+      expect: "empty or only new files"
+      fail_action: "abort"
+    
+    - check: "vault_accessible"
+      command: "vault status"
+      expect: "unsealed"
+      fail_action: "alert_slack"
+    
+    - check: "ssh_connectivity"
+      command: "ssh smarteros 'echo ok'"
+      expect: "ok"
+      fail_action: "retry_3x"
+    
+    - check: "disk_space_local"
+      command: "df -h . | awk 'NR==2 {print $5}' | tr -d %"
+      expect: "< 90"
+      fail_action: "cleanup_artifacts"
+    
+    - check: "disk_space_vps"
+      command: "ssh smarteros 'df -h /opt/smarteros | awk \"NR==2 {print \\$5}\" | tr -d %'"
+      expect: "< 85"
+      fail_action: "alert_slack"
+  
+  post_execution:
+    - check: "service_healthy"
+      command: "ssh smarteros 'systemctl is-active smarteros-app'"
+      expect: "active"
+      fail_action: "rollback"
+    
+    - check: "http_response"
+      command: "curl -sf https://app.smarterbot.cl/health"
+      expect: '{"status":"ok"}'
+      fail_action: "rollback"
+    
+    - check: "logs_clean"
+      command: "ssh smarteros 'journalctl -u smarteros-app -n 50 --no-pager | grep -E \"ERROR|FATAL\"'"
+      expect: "no matches"
+      fail_action: "create_issue"
+    
+    - check: "response_time"
+      command: "curl -o /dev/null -s -w '%{time_total}' https://app.smarterbot.cl"
+      expect: "< 1.0"
+      fail_action: "alert_slack"
+
+monitoring:
+  real_time:
+    - service: "smarteros-app"
+      command: "ssh smarteros 'journalctl -u smarteros-app -f --no-pager'"
+      trigger: "on_deployment"
+      duration: "2m"
+    
+    - service: "docker"
+      command: "ssh smarteros 'docker stats --no-stream'"
+      trigger: "on_compose_up"
+      duration: "1m"
+  
+  metrics:
+    - name: "commands_executed"
+      type: "counter"
+      labels: ["command_type", "environment"]
+    
+    - name: "execution_duration"
+      type: "histogram"
+      unit: "seconds"
+      labels: ["step", "mode"]
+    
+    - name: "files_modified"
+      type: "counter"
+      labels: ["file_type"]
+    
+    - name: "deployments"
+      type: "counter"
+      labels: ["mode", "success"]
+    
+    - name: "rollbacks"
+      type: "counter"
+      labels: ["reason"]
+
+error_handling:
+  strategies:
+    compilation_error:
+      action: "rollback"
+      notify: "director-gemini"
+      create_issue: true
+      log_level: "error"
+    
+    test_failure:
+      action: "rollback"
+      notify: "director-gemini"
+      create_issue: true
+      log_level: "error"
+    
+    network_timeout:
+      action: "retry_3x"
+      notify: "slack"
+      create_issue: false
+      log_level: "warning"
+    
+    service_unhealthy:
+      action: "rollback"
+      notify: "slack + director"
+      create_issue: true
+      log_level: "critical"
+  
+  logging:
+    format: "jsonl"
+    fields:
+      - "timestamp"
+      - "agent"
+      - "command"
+      - "exit_code"
+      - "duration"
+      - "stdout"
+      - "stderr"
+      - "context"
+    
+    rotation:
+      max_size: "100MB"
+      max_age: "30d"
+      compress: true
+
+security:
+  permissions:
+    read:
+      - "app.smarterbot.cl/**"
+      - "smarterbot.cl/**"
+      - "smarteros-specs/**"
+      - "/tmp/smarteros/**"
+      - "vault:smarteros/**"
+    
+    write:
+      - "app.smarterbot.cl/**"
+      - "smarterbot.cl/**"
+      - "smarteros-specs/**"
+      - "/tmp/smarteros/**"
+      - "vault:smarteros/agents/codex-*"
+      - "/var/log/smarteros/codex-*"
+    
+    execute:
+      - "whitelisted commands only"
+      - "ssh smarteros (limited by sudoers)"
+  
+  ssh_config:
+    host: "smarteros"
+    user: "smarteros"
+    identity_file: "~/.ssh/id_rsa_smarteros"
+    strict_host_key_checking: "accept-new"
+    command_restrictions:
+      - "rsync --server*"
+      - "sudo systemctl restart smarteros-app"
+      - "sudo systemctl reload caddy"
+      - "sudo systemctl daemon-reload"
+  
+  vault_integration:
+    auth_method: "token"
+    token_source: "env:VAULT_TOKEN"
+    policies: ["ci-readonly", "codex-executor"]
+    secret_cache_ttl: "5m"
+
+cleanup:
+  automatic:
+    - target: "/tmp/smarteros/patches/*.patch"
+      retention: "24h"
+      action: "delete"
+    
+    - target: "/tmp/smarteros/generated/**"
+      retention: "24h"
+      action: "delete"
+    
+    - target: "/tmp/smarteros/reports/*.json"
+      retention: "7d"
+      action: "archive_to_vault"
+    
+    - target: "node_modules/.cache"
+      retention: "7d"
+      action: "delete"
+    
+    - target: "*.log.old"
+      retention: "30d"
+      action: "compress"
+
+collaboration:
+  with_director:
+    - "Receive execution plan"
+    - "Report progress (10%, 50%, 90%, 100%)"
+    - "Request decision on ambiguous situations"
+    - "Deliver final report with metrics"
+  
+  with_writer:
+    - "Apply patches atomically"
+    - "Report application errors"
+    - "Suggest improvements based on failures"
+
+examples:
+  - task: "Deploy new feature to production"
+    steps:
+      - action: "apply_patch"
+        file: "/tmp/smarteros/patches/feat-123.patch"
+        validation: "pnpm tsc --noEmit"
+      
+      - action: "run_tests"
+        command: "pnpm test"
+        timeout: "5m"
+      
+      - action: "build"
+        command: "cd app.smarterbot.cl && pnpm build"
+        timeout: "10m"
+      
+      - action: "sync"
+        command: "./sync-smarteros.sh app"
+        timeout: "5m"
+      
+      - action: "restart_service"
+        command: "ssh smarteros 'sudo systemctl restart smarteros-app'"
+        validation: "curl -f https://app.smarterbot.cl/health"
+      
+      - action: "monitor"
+        command: "ssh smarteros 'journalctl -u smarteros-app -f --no-pager'"
+        duration: "2m"
+    
+    expected_result:
+      success: true
+      duration: "< 15m"
+      files_modified: 3
+      services_restarted: 1
+
+notes: |
+  Este agente es el "ejecutor" del sistema. Nunca decide qué hacer,
+  solo ejecuta instrucciones de Gemini y aplica código de Copilot.
+  
+  Tiene capacidad de rollback automático y validación exhaustiva.
+  Todos los comandos están whitelisted y auditados.
+  
+  Actualizar este spec cuando:
+  - Se agreguen nuevos comandos permitidos
+  - Cambien criterios de validación
+  - Se detecten patrones de fallo recurrentes

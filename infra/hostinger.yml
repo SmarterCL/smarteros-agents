@@ -1,0 +1,333 @@
+# Hostinger VPS Configuration
+# VPS físico donde corre SmarterOS
+# 
+# MÉTODOS DE ACCESO:
+# 1. API MCP (smarteros/mcp/hostinger) - Management operations
+# 2. SSH Direct (smarteros/ssh/deploy) - Deploy operations
+
+provider: "hostinger"
+type: "vps"
+plan: "VPS Business"
+specs:
+  ram: "8GB"
+  cpu: "4 vCPU"
+  storage: "200GB NVMe"
+  bandwidth: "Unlimited"
+
+instance:
+  ip: "89.116.23.167"
+  hostname: "smarteros.smarterbot.cl"
+  os: "Ubuntu 24.04 LTS"
+  region: "EU"
+  uptime_sla: "99.9%"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Management Access (API MCP)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+api_management:
+  mcp_server: "hostinger-api-mcp"
+  vault_path: "smarteros/mcp/hostinger"
+  repository: "https://github.com/hostinger/api-mcp-server"
+  
+  auth:
+    method: "bearer-token"
+    token_source: "https://hpanel.hostinger.com/api-tokens"
+  
+  capabilities:
+    - "VPS lifecycle (start, stop, reboot, recreate)"
+    - "SSH keys management via API"
+    - "Firewall configuration"
+    - "Backup creation and restoration"
+    - "Docker projects management"
+    - "Domain management (check, privacy, forwarding)"
+    - "Billing queries"
+    - "Nameserver configuration"
+  
+  primary_agent: "executor-codex"
+  secondary_agent: "director-gemini"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SSH Direct Access (Deploy Operations)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ssh_access:
+  user: "smarteros"
+  vault_path: "smarteros/ssh/deploy"
+  
+  keys:
+    - name: "id_rsa_smarteros"
+      type: "ed25519"
+      purpose: "Deploy automation (Codex agent)"
+      vault_secret: "private_key"
+    
+    - name: "id_smarteros_root"
+      type: "ed25519"
+      purpose: "Admin access (manual ops)"
+      vault_secret: "root_private_key"
+  
+  authorized_keys: "/home/smarteros/.ssh/authorized_keys"
+  
+  ssh_config: |
+    Host smarteros
+      HostName 89.116.23.167
+      User smarteros
+      IdentityFile ~/.ssh/id_rsa_smarteros
+      StrictHostKeyChecking accept-new
+    
+    Host smarteros-root
+      HostName 89.116.23.167
+      User root
+      IdentityFile ~/.ssh/id_smarteros_root
+      StrictHostKeyChecking accept-new
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Firewall Rules
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+firewall:
+  tool: "ufw"
+  rules:
+    - port: 22
+      protocol: tcp
+      action: allow
+      comment: "SSH access"
+    
+    - port: 80
+      protocol: tcp
+      action: allow
+      comment: "HTTP (Caddy)"
+    
+    - port: 443
+      protocol: tcp
+      action: allow
+      comment: "HTTPS (Caddy)"
+    
+    - port: 8200
+      protocol: tcp
+      action: allow
+      from: "0.0.0.0/0"
+      comment: "Vault API (secured with TLS)"
+    
+    - default_incoming: deny
+    - default_outgoing: allow
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Services Running on VPS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+services:
+  vault:
+    port: 8200
+    protocol: https
+    binary: "/opt/smarteros/vault/vault"
+    config: "/opt/smarteros/vault/config.hcl"
+    systemd: "vault.service"
+    data_dir: "/opt/smarteros/vault/data"
+    status: "active"
+    sealed: false
+  
+  caddy:
+    ports: [80, 443]
+    protocol: https
+    binary: "/usr/bin/caddy"
+    config: "/etc/caddy/Caddyfile"
+    systemd: "caddy.service"
+    sites:
+      - "app.smarterbot.cl"
+      - "smarterbot.cl"
+      - "vault.smarterbot.cl"
+      - "metabase.smarterbot.cl"
+    status: "active"
+  
+  docker:
+    socket: "/var/run/docker.sock"
+    version: "24.0"
+    compose_version: "2.20"
+    containers:
+      - name: "n8n"
+        port: 5678
+        status: "running"
+      
+      - name: "metabase"
+        port: 3000
+        status: "running"
+  
+  smarteros_app:
+    name: "app.smarterbot.cl"
+    path: "/opt/smarteros/apps/main"
+    port: 3000
+    framework: "Next.js (standalone)"
+    systemd: "smarteros-app.service"
+    status: "active"
+    reverse_proxy: "caddy"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Deployment Configuration
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+deployment:
+  agent: "executor-codex"
+  
+  methods:
+    rsync:
+      enabled: true
+      command: "rsync -avz --delete"
+      source: ".next/standalone/"
+      destination: "smarteros@89.116.23.167:/opt/smarteros/apps/main/"
+      exclude:
+        - ".git/"
+        - "node_modules/"
+        - ".next/cache/"
+    
+    systemctl:
+      enabled: true
+      commands:
+        - "sudo systemctl restart smarteros-app"
+        - "sudo systemctl status smarteros-app"
+  
+  scripts:
+    setup: "scripts/setup-ssh-deploy.sh"
+    deploy: "scripts/deploy-app.sh"
+    rollback: "scripts/rollback-app.sh"
+  
+  validation:
+    pre_deploy:
+      - check: "ssh_connectivity"
+        command: "ssh smarteros 'echo ok'"
+      
+      - check: "disk_space"
+        command: "ssh smarteros 'df -h /opt/smarteros'"
+        threshold: "80%"
+    
+    post_deploy:
+      - check: "service_running"
+        command: "ssh smarteros 'systemctl is-active smarteros-app'"
+      
+      - check: "http_response"
+        url: "https://app.smarterbot.cl"
+        expected_status: 200
+        timeout: 10s
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Monitoring & Logging
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+monitoring:
+  uptime:
+    provider: "uptime.smarterbot.cl"
+    checks:
+      - name: "HTTPS app.smarterbot.cl"
+        interval: "5m"
+      
+      - name: "Vault API"
+        url: "https://vault.smarterbot.cl:8200/v1/sys/health"
+        interval: "5m"
+  
+  logs:
+    path: "/var/log/smarteros/"
+    files:
+      - "app.log"
+      - "vault-audit.log"
+      - "caddy-access.log"
+      - "deploy.log"
+    
+    rotation:
+      max_size: "100M"
+      max_age: "30d"
+      compress: true
+  
+  metrics:
+    - cpu_usage
+    - memory_usage
+    - disk_usage
+    - network_traffic
+    - service_status
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Backup Strategy
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+backup:
+  vault_data:
+    path: "/opt/smarteros/vault/data"
+    frequency: "daily"
+    retention: "30d"
+    destination: "s3://smarteros-backups/vault/"
+  
+  app_data:
+    path: "/opt/smarteros/apps/main"
+    frequency: "on_deploy"
+    retention: "7d"
+    destination: "local:/opt/smarteros/backups/app/"
+  
+  database:
+    provider: "supabase"
+    managed: true
+    point_in_time_recovery: true
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Security Hardening
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+security:
+  ssh:
+    password_auth: false
+    root_login: false
+    port: 22
+    max_auth_tries: 3
+    fail2ban: true
+  
+  ssl:
+    provider: "caddy_auto_https"
+    cert_authority: "Let's Encrypt"
+    auto_renew: true
+  
+  updates:
+    auto_security_updates: true
+    schedule: "weekly"
+  
+  hardening:
+    - disable_unused_services: true
+    - enable_firewall: true
+    - restrict_sudo: true
+    - audit_logging: true
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Disaster Recovery
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+disaster_recovery:
+  rto: "4 hours"  # Recovery Time Objective
+  rpo: "1 hour"   # Recovery Point Objective
+  
+  procedures:
+    - name: "VPS failure"
+      steps:
+        - "Provision new VPS"
+        - "Restore Vault data from S3"
+        - "Unseal Vault with recovery keys"
+        - "Deploy latest app version"
+        - "Update DNS if IP changed"
+    
+    - name: "Service failure"
+      steps:
+        - "Check systemd status"
+        - "Review logs in /var/log/smarteros/"
+        - "Restart service or rollback"
+        - "Alert in Slack"
+
+notes: |
+  Hostinger VPS es la infraestructura física de SmarterOS.
+  
+  No es un MCP API provider (no tiene SDK/REST API).
+  
+  Acceso:
+  - SSH con claves asimétricas (smarteros/ssh/deploy)
+  - Usuario: smarteros (sudoers limitado)
+  - Deploy: rsync + systemctl (via Codex agent)
+  
+  La gestión se hace via:
+  - Panel de Hostinger: https://hpanel.hostinger.com
+  - SSH directo: ssh smarteros@89.116.23.167
+  - Scripts: setup-ssh-deploy.sh, deploy-app.sh

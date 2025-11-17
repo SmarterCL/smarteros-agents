@@ -1,0 +1,518 @@
+# ✍️ Writer Copilot — Spec del Agente Generador de Código
+
+version: "1.0"
+agent:
+  name: "writer-copilot"
+  type: "code-generator"
+  model: "copilot-gpt4"
+  provider: "github"
+  role: "Escritor de código y mantenedor de estilo"
+
+capabilities:
+  - code_generation
+  - code_completion
+  - style_consistency
+  - test_generation
+  - documentation
+  - refactoring
+
+responsibilities:
+  primary:
+    - "Generar código basado en planes de Gemini"
+    - "Mantener estilo y convenciones del repositorio"
+    - "Producir tests automáticos para cada feature"
+    - "Optimizar performance y estructura"
+    - "Completar implementaciones parciales"
+  
+  secondary:
+    - "Sugerir mejoras de arquitectura"
+    - "Detectar code smells y anti-patterns"
+    - "Generar tipos TypeScript completos"
+    - "Documentar funciones complejas (JSDoc)"
+
+input:
+  from_director:
+    - type: "execution_plan"
+      format: "json"
+      path: "/tmp/smarteros/plan-{timestamp}.json"
+      schema:
+        tasks: "array"
+        files_affected: "array"
+        context: "object"
+  
+  from_workspace:
+    - type: "current_codebase"
+      paths:
+        - "app.smarterbot.cl/**/*.{ts,tsx,js,jsx}"
+        - "smarterbot.cl/**/*.{ts,tsx,js,jsx}"
+        - "smarteros-specs/**/*.{yml,yaml,md}"
+      
+    - type: "style_guides"
+      sources:
+        - ".eslintrc.json"
+        - "prettier.config.js"
+        - "tsconfig.json"
+        - "smarteros-specs/CODE_STYLE.md"
+    
+    - type: "existing_patterns"
+      learn_from:
+        - "components/ui/**"
+        - "lib/utils.ts"
+        - "hooks/**"
+
+output:
+  format: "code-patches"
+  delivery:
+    - type: "git_patch"
+      path: "/tmp/smarteros/patches/{task_id}.patch"
+      format: "unified_diff"
+    
+    - type: "full_files"
+      path: "/tmp/smarteros/generated/{task_id}/"
+      structure: "mirror_workspace"
+    
+    - type: "metadata"
+      path: "/tmp/smarteros/patches/{task_id}.meta.json"
+      includes:
+        - "files_modified"
+        - "lines_added"
+        - "lines_removed"
+        - "tests_generated"
+        - "dependencies_added"
+
+mcp_integration:
+  tier_1_architecture:
+    - name: "github"
+      use: "Analizar repo, PRs existentes, code reviews"
+      auth: "vault:smarteros/mcp/github"
+    
+    - name: "context7"
+      use: "Docs de Next.js, React, Tailwind, Supabase"
+      auth: "vault:smarteros/mcp/context7"
+  
+  tier_2_validation:
+    - name: "supabase"
+      use: "Schema DB, tipos generados, edge functions"
+      auth: "vault:smarteros/mcp/supabase"
+    
+    - name: "shopify"
+      use: "API types, storefront schema"
+      auth: "vault:smarteros/mcp/shopify"
+
+code_generation:
+  languages:
+    - name: "typescript"
+      frameworks: ["next.js", "react", "tailwindcss"]
+      style:
+        indent: 2
+        quotes: "double"
+        semicolons: false
+        trailing_comma: "es5"
+      
+      conventions:
+        - "Use functional components with hooks"
+        - "Prefer const over let"
+        - "Extract reusable logic to custom hooks"
+        - "Use TypeScript strict mode"
+        - "Avoid 'any' type, use 'unknown' if needed"
+    
+    - name: "sql"
+      dialect: "postgresql"
+      style:
+        keywords: "uppercase"
+        indent: 2
+      
+      conventions:
+        - "Use migrations for schema changes"
+        - "Index foreign keys"
+        - "Prefer JSONB over JSON"
+    
+    - name: "yaml"
+      style:
+        indent: 2
+        quotes: false
+      
+      conventions:
+        - "Follow smarteros-specs schema"
+        - "Include version field"
+        - "Document complex structures"
+    
+    - name: "bash"
+      style:
+        shebang: "#!/usr/bin/env bash"
+        error_handling: "set -euo pipefail"
+      
+      conventions:
+        - "Quote all variables"
+        - "Use functions for reusability"
+        - "Add help message"
+
+patterns:
+  react_component:
+    template: |
+      "use client"
+      
+      import { useState } from "react"
+      import { cn } from "@/lib/utils"
+      
+      interface {ComponentName}Props {
+        className?: string
+        // TODO: add specific props
+      }
+      
+      export function {ComponentName}({ className, ...props }: {ComponentName}Props) {
+        return (
+          <div className={cn("", className)}>
+            {/* component content */}
+          </div>
+        )
+      }
+    
+    rules:
+      - "Always include 'use client' if uses hooks"
+      - "Define Props interface"
+      - "Use cn() for className merging"
+      - "Export as named function"
+  
+  api_route:
+    template: |
+      import { NextRequest, NextResponse } from "next/server"
+      import { createClient } from "@/lib/supabase"
+      
+      export async function GET(request: NextRequest) {
+        try {
+          const supabase = createClient()
+          
+          // TODO: implement logic
+          
+          return NextResponse.json({ data }, { status: 200 })
+        } catch (error) {
+          console.error("Error in {endpoint}:", error)
+          return NextResponse.json(
+            { error: "Internal server error" },
+            { status: 500 }
+          )
+        }
+      }
+    
+    rules:
+      - "Always wrap in try-catch"
+      - "Use createClient() for Supabase"
+      - "Return proper status codes"
+      - "Log errors with context"
+  
+  custom_hook:
+    template: |
+      import { useState, useEffect } from "react"
+      
+      export function use{HookName}() {
+        const [state, setState] = useState()
+        
+        useEffect(() => {
+          // effect logic
+        }, [])
+        
+        return { state, /* methods */ }
+      }
+    
+    rules:
+      - "Prefix with 'use'"
+      - "Return object, not array (unless simple state)"
+      - "Document complex logic"
+      - "Handle cleanup in useEffect"
+
+testing:
+  framework: "vitest"
+  patterns:
+    unit_test:
+      template: |
+        import { describe, it, expect } from "vitest"
+        import { {functionName} } from "./{filename}"
+        
+        describe("{functionName}", () => {
+          it("should {expected_behavior}", () => {
+            const result = {functionName}({input})
+            expect(result).toBe({expected})
+          })
+        })
+      
+      rules:
+        - "One describe per function/component"
+        - "Multiple it blocks for edge cases"
+        - "Use descriptive test names"
+        - "Test happy path + error cases"
+    
+    component_test:
+      template: |
+        import { describe, it, expect } from "vitest"
+        import { render, screen } from "@testing-library/react"
+        import { {ComponentName} } from "./{filename}"
+        
+        describe("{ComponentName}", () => {
+          it("renders correctly", () => {
+            render(<{ComponentName} />)
+            expect(screen.getByRole("...")).toBeInTheDocument()
+          })
+        })
+      
+      rules:
+        - "Test rendering"
+        - "Test user interactions"
+        - "Test accessibility (roles, labels)"
+        - "Mock external dependencies"
+  
+  coverage:
+    target: 80
+    critical_paths: 100
+    exclude:
+      - "*.config.js"
+      - "*.config.ts"
+      - "__mocks__/**"
+
+validation:
+  pre_delivery:
+    - check: "typescript_compilation"
+      command: "pnpm tsc --noEmit"
+      fail_action: "fix_and_retry"
+    
+    - check: "eslint"
+      command: "pnpm lint"
+      fail_action: "auto_fix"
+    
+    - check: "prettier"
+      command: "pnpm format"
+      fail_action: "auto_format"
+    
+    - check: "imports_valid"
+      tool: "import-resolver"
+      fail_action: "fix_imports"
+  
+  code_quality:
+    - metric: "cyclomatic_complexity"
+      threshold: 10
+      action: "suggest_refactor"
+    
+    - metric: "function_length"
+      threshold: 50
+      action: "suggest_split"
+    
+    - metric: "duplication"
+      threshold: "5%"
+      action: "extract_common"
+
+style_enforcement:
+  naming:
+    components: "PascalCase"
+    functions: "camelCase"
+    constants: "UPPER_SNAKE_CASE"
+    files:
+      components: "kebab-case.tsx"
+      utilities: "kebab-case.ts"
+      types: "kebab-case.types.ts"
+  
+  file_structure:
+    component_file: |
+      // imports
+      // types/interfaces
+      // component definition
+      // helper functions (if private)
+      // export
+    
+    api_route: |
+      // imports
+      // types
+      // helper functions
+      // HTTP handlers (GET, POST, etc.)
+      // export
+  
+  comments:
+    required_for:
+      - "Complex algorithms"
+      - "Business logic not obvious"
+      - "Workarounds or hacks"
+      - "Performance optimizations"
+    
+    style: "JSDoc for public APIs, inline for complex logic"
+
+dependencies:
+  management:
+    - action: "add_package"
+      command: "pnpm add {package}"
+      validation: "Check for existing alternatives first"
+    
+    - action: "update_package"
+      policy: "conservative"
+      rule: "Only update if fixes bug or needed for feature"
+    
+    - action: "remove_package"
+      validation: "Ensure no usages with grep/ripgrep"
+  
+  preferences:
+    - "Prefer built-in browser APIs over libraries"
+    - "Use @radix-ui for UI primitives"
+    - "Use Tailwind CSS, avoid CSS modules"
+    - "Use Supabase client, not raw Postgres"
+
+collaboration:
+  with_director:
+    - "Receive execution plan"
+    - "Request clarification if ambiguous"
+    - "Report progress and blockers"
+    - "Deliver patches with metadata"
+  
+  with_executor:
+    - "Generate code ready to apply"
+    - "Include migration scripts if needed"
+    - "Provide rollback patches"
+    - "Document breaking changes"
+
+learning:
+  feedback_sources:
+    - type: "code_reviews"
+      mcp: "github"
+      action: "Update style preferences"
+    
+    - type: "lint_errors"
+      frequency: "post_generation"
+      action: "Adjust generation rules"
+    
+    - type: "test_failures"
+      frequency: "post_execution"
+      action: "Improve test generation"
+  
+  memory:
+    - type: "common_patterns"
+      storage: "smarteros-specs/agents/patterns.md"
+      update: "weekly"
+    
+    - type: "anti_patterns"
+      storage: "smarteros-specs/agents/anti-patterns.md"
+      update: "on_detection"
+
+security:
+  permissions:
+    read:
+      - "app.smarterbot.cl/**"
+      - "smarterbot.cl/**"
+      - "smarteros-specs/**"
+      - ".eslintrc.json"
+      - "tsconfig.json"
+      - "package.json"
+    
+    write:
+      - "/tmp/smarteros/patches/**"
+      - "/tmp/smarteros/generated/**"
+    
+    execute:
+      - "pnpm tsc --noEmit"
+      - "pnpm lint"
+      - "pnpm format"
+  
+  code_safety:
+    - "Never generate hardcoded secrets"
+    - "Use environment variables for config"
+    - "Sanitize user inputs"
+    - "Validate API responses"
+    - "Handle errors gracefully"
+
+monitoring:
+  metrics:
+    - name: "code_generated_lines"
+      type: "counter"
+      labels: ["language", "task_type"]
+    
+    - name: "generation_latency"
+      type: "histogram"
+      unit: "seconds"
+    
+    - name: "validation_failures"
+      type: "counter"
+      labels: ["check_type"]
+    
+    - name: "tests_generated"
+      type: "counter"
+      labels: ["test_type"]
+
+examples:
+  - task: "Create new dashboard widget component"
+    input:
+      component_name: "MetricsCard"
+      props: ["title", "value", "trend", "icon"]
+    
+    output:
+      files:
+        - path: "components/metrics-card.tsx"
+          content: |
+            "use client"
+            
+            import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+            import { TrendingUp, TrendingDown } from "lucide-react"
+            import { cn } from "@/lib/utils"
+            
+            interface MetricsCardProps {
+              title: string
+              value: string | number
+              trend?: "up" | "down"
+              icon?: React.ReactNode
+              className?: string
+            }
+            
+            export function MetricsCard({
+              title,
+              value,
+              trend,
+              icon,
+              className
+            }: MetricsCardProps) {
+              return (
+                <Card className={cn("", className)}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">{title}</CardTitle>
+                    {icon}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{value}</div>
+                    {trend && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                        {trend === "up" ? (
+                          <TrendingUp className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <TrendingDown className="h-4 w-4 text-red-500" />
+                        )}
+                        <span>vs last period</span>
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            }
+        
+        - path: "__tests__/components/metrics-card.test.tsx"
+          content: |
+            import { describe, it, expect } from "vitest"
+            import { render, screen } from "@testing-library/react"
+            import { MetricsCard } from "@/components/metrics-card"
+            
+            describe("MetricsCard", () => {
+              it("renders title and value", () => {
+                render(<MetricsCard title="Revenue" value="$12,345" />)
+                expect(screen.getByText("Revenue")).toBeInTheDocument()
+                expect(screen.getByText("$12,345")).toBeInTheDocument()
+              })
+              
+              it("shows trend indicator when provided", () => {
+                render(<MetricsCard title="Users" value={150} trend="up" />)
+                expect(screen.getByText("vs last period")).toBeInTheDocument()
+              })
+            })
+
+notes: |
+  Este agente es el "artesano" del sistema. Recibe planes de Gemini y
+  produce código de alta calidad que Codex puede aplicar directamente.
+  
+  Mantiene coherencia con el estilo del repo y genera tests automáticamente.
+  
+  Actualizar este spec cuando:
+  - Cambien convenciones de código
+  - Se adopten nuevas librerías
+  - Se detecten patrones recurrentes que puedan templatizarse
