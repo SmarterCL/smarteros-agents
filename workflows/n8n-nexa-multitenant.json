@@ -1,0 +1,141 @@
+{
+  "name": "Nexa Multi-Tenant Chat Example",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nexa-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "nexa-chat-webhook"
+    },
+    {
+      "parameters": {
+        "url": "http://nexa-runtime:8080/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Tenant-Id",
+              "value": "={{ $json.tenant_id || 'demo' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": $json.model || \"llama-3-8b-instruct\",\n  \"messages\": $json.messages,\n  \"temperature\": $json.temperature || 0.7,\n  \"max_tokens\": $json.max_tokens || 1024\n} }}",
+        "options": {}
+      },
+      "id": "http-nexa-request",
+      "name": "Call Nexa Runtime",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "ai_runtime_logs",
+        "columns": "tenant_id, model, prompt_tokens, completion_tokens, total_tokens, response_time_ms, created_at",
+        "options": {}
+      },
+      "id": "supabase-log",
+      "name": "Log to Supabase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [650, 400],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-connection",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-node",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract metrics for logging\nconst response = $input.first().json;\nconst startTime = $('Webhook Trigger').first().json.timestamp || Date.now();\nconst endTime = Date.now();\n\nreturn {\n  tenant_id: $('Webhook Trigger').first().json.tenant_id || 'demo',\n  model: response.model,\n  prompt_tokens: response.usage?.prompt_tokens || 0,\n  completion_tokens: response.usage?.completion_tokens || 0,\n  total_tokens: response.usage?.total_tokens || 0,\n  response_time_ms: endTime - startTime,\n  created_at: new Date().toISOString()\n};"
+      },
+      "id": "prepare-log",
+      "name": "Prepare Log Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call Nexa Runtime",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Nexa Runtime": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Data": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["nexa", "multi-tenant", "ai"],
+  "triggerCount": 0,
+  "updatedAt": "2025-11-18T19:53:00.000Z",
+  "versionId": "1"
+}
