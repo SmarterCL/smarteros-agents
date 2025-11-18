@@ -1,0 +1,52 @@
+{
+  "name": "Nexa Runtime Overview",
+  "description": "Multi-tenant AI Runtime monitoring dashboard for SmarterOS",
+  "collection": "SmarterOS/Nexa",
+  "parameters": [],
+  "cards": [
+    {
+      "id": 1,
+      "name": "Total Requests (24h)",
+      "display": "scalar",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT COUNT(*) as count FROM ai_runtime_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "name": "Requests by Tenant (Heatmap)",
+      "display": "line",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT tenant_id, DATE_TRUNC('hour', created_at) as hour, COUNT(*) as count FROM ai_runtime_logs WHERE created_at > NOW() - INTERVAL '24 hours' GROUP BY 1, 2 ORDER BY 2 DESC"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "name": "Average Latency by Model",
+      "display": "bar",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT model, AVG(response_time_ms) as avg_latency, COUNT(*) as requests FROM ai_runtime_logs WHERE created_at > NOW() - INTERVAL '24 hours' GROUP BY 1 ORDER BY 2 DESC"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "name": "Token Consumption (Daily)",
+      "display": "line",
+      "dataset_query": {
+        "type": "native",
+        "native": {
+          "query": "SELECT DATE_TRUNC('day', created_at) as day, SUM(prompt_tokens + completion_tokens) as total_tokens FROM ai_runtime_logs WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY 1 ORDER BY 1 DESC"
+        }
+      }
+    }
+  ]
+}

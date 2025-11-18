@@ -1,0 +1,131 @@
+{
+  "name": "Shopify Dynamic Prompt Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shopify-ai-chat",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-shopify",
+      "name": "Shopify Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT tenant_id, system_prompt, model_config FROM shopify_tenant_prompts WHERE shop_domain = $1 AND active = true LIMIT 1",
+        "additionalFields": {
+          "queryParameters": "={{ $json.shop_domain }}"
+        }
+      },
+      "id": "get-tenant-prompt",
+      "name": "Get Tenant Prompt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tenant = $input.first().json;\nconst config = JSON.parse(tenant.model_config || '{}');\nconst shopifyPayload = $('Shopify Webhook').first().json;\n\nreturn {\n  tenant_id: tenant.tenant_id,\n  messages: [\n    {\n      role: 'system',\n      content: tenant.system_prompt\n    },\n    {\n      role: 'user',\n      content: JSON.stringify(shopifyPayload)\n    }\n  ],\n  temperature: config.temperature || 0.7,\n  max_tokens: config.max_tokens || 1024,\n  model: config.model || 'llama-3-8b-instruct'\n};"
+      },
+      "id": "build-ai-request",
+      "name": "Build AI Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://ai.smarterbot.store/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Tenant-Id",
+              "value": "={{ $json.tenant_id }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}"
+      },
+      "id": "call-nexa-runtime",
+      "name": "Call Nexa Runtime",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "ai_runtime_logs",
+        "columns": "tenant_id,model,endpoint,prompt_tokens,completion_tokens,total_tokens,response_time_ms,status_code,created_at",
+        "additionalFields": {}
+      },
+      "id": "log-to-supabase",
+      "name": "Log to Supabase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [1050, 400],
+      "credentials": {
+        "postgres": {
+          "id": "supabase",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Shopify Webhook": {
+      "main": [[{"node": "Get Tenant Prompt", "type": "main", "index": 0}]]
+    },
+    "Get Tenant Prompt": {
+      "main": [[{"node": "Build AI Request", "type": "main", "index": 0}]]
+    },
+    "Build AI Request": {
+      "main": [[{"node": "Call Nexa Runtime", "type": "main", "index": 0}]]
+    },
+    "Call Nexa Runtime": {
+      "main": [
+        [
+          {"node": "Respond to Webhook", "type": "main", "index": 0},
+          {"node": "Log to Supabase", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["shopify", "nexa", "ai", "dynamic-prompts"],
+  "triggerCount": 0,
+  "updatedAt": "2025-11-18T20:24:38.275Z"
+}
