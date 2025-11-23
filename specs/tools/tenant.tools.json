@@ -1,0 +1,238 @@
+{
+  "name": "tenant-tools",
+  "version": "1.0.0",
+  "description": "MCP Tools para gestionar tenants SmarterOS por RUT chileno",
+  "provider": "smarteros-mcp",
+  "tools": [
+    {
+      "name": "tenant.get",
+      "description": "Obtiene datos completos de un tenant por RUT",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT chileno (formato: 12345678-9)",
+            "pattern": "^\\d{7,8}-[\\dKk]$"
+          }
+        },
+        "required": ["rut"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "rut": {"type": "string"},
+          "razon_social": {"type": "string"},
+          "email_contacto": {"type": "string"},
+          "telefono_contacto": {"type": "string"},
+          "dominio_principal": {"type": "string"},
+          "is_active": {"type": "boolean"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
+    {
+      "name": "tenant.ensure",
+      "description": "Crea el tenant si no existe, o devuelve el existente. Idempotent operation.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT chileno (formato: 12345678-9)",
+            "pattern": "^\\d{7,8}-[\\dKk]$"
+          },
+          "razon_social": {
+            "type": "string",
+            "description": "Razón social de la empresa"
+          },
+          "email_contacto": {
+            "type": "string",
+            "format": "email",
+            "description": "Email de contacto principal"
+          },
+          "telefono_contacto": {
+            "type": "string",
+            "description": "Teléfono de contacto (opcional)"
+          },
+          "dominio_principal": {
+            "type": "string",
+            "description": "Dominio principal del tenant (opcional)"
+          }
+        },
+        "required": ["rut", "razon_social", "email_contacto"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "tenant": {"type": "object"},
+          "created": {"type": "boolean", "description": "true if newly created, false if existing"}
+        }
+      }
+    },
+    {
+      "name": "tenant.services.list",
+      "description": "Lista todos los servicios conectados de un tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          }
+        },
+        "required": ["rut"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "service_type": {"type": "string", "enum": ["shopify", "odoo", "chatwoot", "n8n"]},
+                "status": {"type": "string", "enum": ["pending", "connected", "error", "disconnected"]},
+                "external_id": {"type": "string"},
+                "metadata": {"type": "object"},
+                "created_at": {"type": "string", "format": "date-time"},
+                "updated_at": {"type": "string", "format": "date-time"}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "tenant.services.update",
+      "description": "Actualiza el estado de un servicio del tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "service_type": {
+            "type": "string",
+            "enum": ["shopify", "odoo", "chatwoot", "n8n"],
+            "description": "Tipo de servicio"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "connected", "error", "disconnected"],
+            "description": "Nuevo estado del servicio"
+          },
+          "external_id": {
+            "type": "string",
+            "description": "ID externo (shop domain, db name, etc)"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Metadata específica del servicio"
+          }
+        },
+        "required": ["rut", "service_type", "status"]
+      }
+    },
+    {
+      "name": "tenant.events.log",
+      "description": "Registra un evento del tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "event_type": {
+            "type": "string",
+            "description": "Tipo de evento",
+            "examples": [
+              "onboard_started",
+              "onboard_completed",
+              "shopify_connected",
+              "odoo_error",
+              "dte_sent"
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "description": "Datos del evento"
+          }
+        },
+        "required": ["rut", "event_type"]
+      }
+    },
+    {
+      "name": "tenant.events.list",
+      "description": "Lista eventos recientes de un tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "event_type": {
+            "type": "string",
+            "description": "Filtrar por tipo de evento (opcional)"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 50,
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Número máximo de eventos a retornar"
+          }
+        },
+        "required": ["rut"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {"type": "string", "format": "uuid"},
+                "event_type": {"type": "string"},
+                "payload": {"type": "object"},
+                "created_at": {"type": "string", "format": "date-time"}
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "tool": "tenant.get",
+      "input": {
+        "rut": "76958020-3"
+      },
+      "description": "Obtener datos del tenant con RUT 76958020-3"
+    },
+    {
+      "tool": "tenant.ensure",
+      "input": {
+        "rut": "12345678-9",
+        "razon_social": "Empresa Demo SpA",
+        "email_contacto": "contacto@demo.cl",
+        "telefono_contacto": "+56912345678"
+      },
+      "description": "Crear o recuperar tenant"
+    },
+    {
+      "tool": "tenant.services.list",
+      "input": {
+        "rut": "76958020-3"
+      },
+      "description": "Listar servicios conectados"
+    }
+  ]
+}

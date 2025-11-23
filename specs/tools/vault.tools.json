@@ -1,0 +1,239 @@
+{
+  "name": "vault-tools",
+  "version": "1.0.0",
+  "description": "MCP Tools para gestionar secretos en Vault por RUT y servicio",
+  "provider": "smarteros-mcp",
+  "tools": [
+    {
+      "name": "vault.get_service_secret",
+      "description": "Lee los secretos de un servicio específico para un tenant (RUT)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant",
+            "pattern": "^\\d{7,8}-[\\dKk]$"
+          },
+          "service": {
+            "type": "string",
+            "enum": ["shopify", "odoo", "chatwoot", "n8n", "sii"],
+            "description": "Servicio del cual leer secretos"
+          }
+        },
+        "required": ["rut", "service"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "Secretos del servicio"
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "created_time": {"type": "string"},
+              "version": {"type": "integer"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "vault.set_service_secret",
+      "description": "Guarda o actualiza los secretos de un servicio para un tenant (RUT)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "service": {
+            "type": "string",
+            "enum": ["shopify", "odoo", "chatwoot", "n8n", "sii"],
+            "description": "Servicio al cual guardar secretos"
+          },
+          "data": {
+            "type": "object",
+            "description": "Secretos a guardar (estructura depende del servicio)",
+            "additionalProperties": true
+          }
+        },
+        "required": ["rut", "service", "data"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string", "enum": ["success", "error"]},
+          "version": {"type": "integer", "description": "Nueva versión del secret"}
+        }
+      }
+    },
+    {
+      "name": "vault.init_tenant_paths",
+      "description": "Inicializa todos los paths de Vault para un nuevo tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant a inicializar"
+          }
+        },
+        "required": ["rut"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string"},
+          "paths_created": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Lista de paths creados en Vault"
+          }
+        }
+      }
+    },
+    {
+      "name": "vault.list_tenant_services",
+      "description": "Lista todos los servicios con secretos configurados para un tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          }
+        },
+        "required": ["rut"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["shopify", "odoo", "chatwoot", "n8n", "sii"]
+            },
+            "description": "Servicios con secretos configurados"
+          }
+        }
+      }
+    },
+    {
+      "name": "vault.delete_service_secret",
+      "description": "Elimina los secretos de un servicio (usar con precaución)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "service": {
+            "type": "string",
+            "enum": ["shopify", "odoo", "chatwoot", "n8n", "sii"],
+            "description": "Servicio a eliminar"
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Confirmación de eliminación (debe ser true)"
+          }
+        },
+        "required": ["rut", "service", "confirm"]
+      }
+    }
+  ],
+  "service_schemas": {
+    "shopify": {
+      "type": "object",
+      "properties": {
+        "shop_domain": {"type": "string", "example": "demo-smarter.myshopify.com"},
+        "access_token": {"type": "string", "example": "shpat_xxxxx"},
+        "webhook_secret": {"type": "string", "example": "whsec_xxxxx"},
+        "api_version": {"type": "string", "example": "2024-04"},
+        "scopes": {"type": "string", "example": "read_products,write_orders"}
+      },
+      "required": ["shop_domain", "access_token"]
+    },
+    "odoo": {
+      "type": "object",
+      "properties": {
+        "base_url": {"type": "string", "example": "https://odoo.smarterbot.cl"},
+        "db": {"type": "string", "example": "tenant_76958020_3"},
+        "username": {"type": "string", "example": "api_user"},
+        "password": {"type": "string"},
+        "company_id": {"type": "integer", "example": 1},
+        "api_key": {"type": "string"}
+      },
+      "required": ["base_url", "db", "username", "password"]
+    },
+    "chatwoot": {
+      "type": "object",
+      "properties": {
+        "base_url": {"type": "string", "example": "https://chat.smarterbot.cl"},
+        "account_id": {"type": "integer", "example": 3},
+        "inbox_id": {"type": "integer", "example": 12},
+        "api_access_token": {"type": "string", "example": "cwpat_xxxxx"},
+        "agent_bot_id": {"type": "integer"}
+      },
+      "required": ["base_url", "account_id", "api_access_token"]
+    },
+    "n8n": {
+      "type": "object",
+      "properties": {
+        "base_url": {"type": "string", "example": "https://n8n.smarterbot.cl"},
+        "api_key": {"type": "string"},
+        "workflow_ids": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "required": ["base_url", "api_key"]
+    },
+    "sii": {
+      "type": "object",
+      "properties": {
+        "cert_pem": {"type": "string", "description": "Certificado digital PEM"},
+        "key_pem": {"type": "string", "description": "Llave privada PEM"},
+        "rut_emisor": {"type": "string"},
+        "ambiente": {"type": "string", "enum": ["certificacion", "produccion"]},
+        "caf_folios": {"type": "object"}
+      },
+      "required": ["cert_pem", "key_pem", "rut_emisor", "ambiente"]
+    }
+  },
+  "examples": [
+    {
+      "tool": "vault.get_service_secret",
+      "input": {
+        "rut": "76958020-3",
+        "service": "shopify"
+      },
+      "description": "Obtener credenciales de Shopify para tenant"
+    },
+    {
+      "tool": "vault.set_service_secret",
+      "input": {
+        "rut": "76958020-3",
+        "service": "shopify",
+        "data": {
+          "shop_domain": "demo-smarter.myshopify.com",
+          "access_token": "shpat_xxxxx",
+          "api_version": "2024-04"
+        }
+      },
+      "description": "Guardar credenciales de Shopify"
+    },
+    {
+      "tool": "vault.init_tenant_paths",
+      "input": {
+        "rut": "12345678-9"
+      },
+      "description": "Inicializar estructura de Vault para nuevo tenant"
+    }
+  ]
+}
