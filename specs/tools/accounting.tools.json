@@ -1,0 +1,304 @@
+{
+  "name": "accounting-tools",
+  "version": "1.0.0",
+  "description": "Motor MCP para convertir ventas en registros contables y DTEs (Chile)",
+  "provider": "smarteros-mcp",
+  "tools": [
+    {
+      "name": "accounting.sales_ingest",
+      "description": "Normaliza una venta (ej: Shopify) y la guarda como sales_event",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["shopify", "odoo", "manual", "api"],
+            "description": "Origen de la venta"
+          },
+          "external_id": {
+            "type": "string",
+            "description": "ID externo (ej: shopify order #12345)"
+          },
+          "raw_payload": {
+            "type": "object",
+            "description": "Payload completo del origen (será normalizado)"
+          }
+        },
+        "required": ["rut", "source", "external_id", "raw_payload"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sales_event_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string"},
+          "total_bruto": {"type": "number"}
+        }
+      }
+    },
+    {
+      "name": "accounting.post_to_odoo",
+      "description": "Crea documentos contables en Odoo para un sales_event",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "sales_event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID del sales_event a procesar"
+          },
+          "confirm_order": {
+            "type": "boolean",
+            "default": true,
+            "description": "Auto-confirmar la orden de venta"
+          },
+          "create_invoice": {
+            "type": "boolean",
+            "default": false,
+            "description": "Auto-generar factura"
+          }
+        },
+        "required": ["rut", "sales_event_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "partner_id": {"type": "integer"},
+          "sale_order_id": {"type": "integer"},
+          "invoice_id": {"type": "integer"},
+          "accounting_events": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    {
+      "name": "accounting.enqueue_dte",
+      "description": "Encola un DTE para un sales_event (generación diferida)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "sales_event_id": {"type": "string", "format": "uuid"},
+          "tipo_dte": {
+            "type": "string",
+            "enum": ["33", "34", "39", "41", "56", "61"],
+            "description": "33=Factura, 39=Boleta, 61=NC, etc"
+          },
+          "folio": {
+            "type": "integer",
+            "description": "Folio específico (opcional, se auto-asigna si no se provee)"
+          }
+        },
+        "required": ["rut", "sales_event_id", "tipo_dte"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "dte_queue_id": {"type": "string", "format": "uuid"},
+          "status": {"type": "string", "enum": ["pending"]},
+          "tipo_dte": {"type": "string"},
+          "folio": {"type": "integer"}
+        }
+      }
+    },
+    {
+      "name": "accounting.dte_status",
+      "description": "Consulta el estado del DTE asociado a un sales_event",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "sales_event_id": {"type": "string", "format": "uuid"}
+        },
+        "required": ["rut", "sales_event_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "dte_queue_id": {"type": "string"},
+          "tipo_dte": {"type": "string"},
+          "folio": {"type": "integer"},
+          "status": {"type": "string"},
+          "sii_track_id": {"type": "string"},
+          "sent_at": {"type": "string"},
+          "accepted_at": {"type": "string"}
+        }
+      }
+    },
+    {
+      "name": "accounting.process_dte_queue",
+      "description": "Procesa DTEs pendientes en la cola (worker job)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "default": 10,
+            "description": "Número máximo de DTEs a procesar"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "processed": {"type": "integer"},
+          "sent": {"type": "integer"},
+          "errors": {"type": "integer"}
+        }
+      }
+    },
+    {
+      "name": "accounting.generate_dte_xml",
+      "description": "Genera XML del DTE (sin enviar)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dte_queue_id": {"type": "string", "format": "uuid"}
+        },
+        "required": ["dte_queue_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "dte_xml": {"type": "string"},
+          "signature": {"type": "string"},
+          "status": {"type": "string"}
+        }
+      }
+    },
+    {
+      "name": "accounting.send_dte_to_sii",
+      "description": "Envía DTE al SII (Servicio de Impuestos Internos - Chile)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "dte_queue_id": {"type": "string", "format": "uuid"}
+        },
+        "required": ["dte_queue_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sii_track_id": {"type": "string"},
+          "status": {"type": "string"},
+          "sent_at": {"type": "string"}
+        }
+      }
+    }
+  ],
+  "workflows": {
+    "complete_sale_flow": {
+      "name": "Flujo Completo de Venta",
+      "description": "Shopify → Odoo → DTE → SII",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Webhook Shopify",
+          "description": "orders/paid recibido"
+        },
+        {
+          "step": 2,
+          "tool": "accounting.sales_ingest",
+          "description": "Normalizar venta Shopify → sales_event"
+        },
+        {
+          "step": 3,
+          "tool": "accounting.post_to_odoo",
+          "description": "Crear partner + sale order + invoice en Odoo"
+        },
+        {
+          "step": 4,
+          "tool": "accounting.enqueue_dte",
+          "description": "Encolar DTE tipo 33 (Factura)"
+        },
+        {
+          "step": 5,
+          "tool": "accounting.process_dte_queue",
+          "description": "Worker procesa cola: genera XML + envía SII"
+        },
+        {
+          "step": 6,
+          "tool": "chatwoot.send_message",
+          "description": "Notificar cliente: 'Factura emitida'"
+        },
+        {
+          "step": 7,
+          "tool": "n8n.trigger_workflow",
+          "description": "Post-sale followup workflow"
+        }
+      ]
+    }
+  },
+  "dte_types": {
+    "33": {
+      "name": "Factura Electrónica",
+      "description": "Factura afecta a IVA",
+      "use_case": "Ventas B2B con IVA"
+    },
+    "34": {
+      "name": "Factura Exenta",
+      "description": "Factura sin IVA",
+      "use_case": "Ventas exentas de IVA"
+    },
+    "39": {
+      "name": "Boleta Electrónica",
+      "description": "Boleta afecta a IVA",
+      "use_case": "Ventas B2C (retail)"
+    },
+    "41": {
+      "name": "Boleta Exenta",
+      "description": "Boleta sin IVA",
+      "use_case": "Ventas B2C exentas"
+    },
+    "56": {
+      "name": "Nota de Débito Electrónica",
+      "description": "Aumenta monto de factura",
+      "use_case": "Ajustes al alza"
+    },
+    "61": {
+      "name": "Nota de Crédito Electrónica",
+      "description": "Anula o reduce factura",
+      "use_case": "Devoluciones, descuentos"
+    }
+  },
+  "examples": [
+    {
+      "tool": "accounting.sales_ingest",
+      "input": {
+        "rut": "76958020-3",
+        "source": "shopify",
+        "external_id": "12345",
+        "raw_payload": {
+          "order_id": 12345,
+          "total_price": "119000",
+          "customer": {
+            "email": "cliente@demo.cl"
+          }
+        }
+      }
+    },
+    {
+      "tool": "accounting.post_to_odoo",
+      "input": {
+        "rut": "76958020-3",
+        "sales_event_id": "550e8400-e29b-41d4-a716-446655440000",
+        "confirm_order": true,
+        "create_invoice": true
+      }
+    },
+    {
+      "tool": "accounting.enqueue_dte",
+      "input": {
+        "rut": "76958020-3",
+        "sales_event_id": "550e8400-e29b-41d4-a716-446655440000",
+        "tipo_dte": "33"
+      }
+    }
+  ]
+}

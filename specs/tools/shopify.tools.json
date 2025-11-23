@@ -1,0 +1,194 @@
+{
+  "name": "shopify-tools",
+  "version": "1.0.0",
+  "description": "MCP Tools para integrar Shopify por tenant (RUT)",
+  "provider": "smarteros-mcp",
+  "tools": [
+    {
+      "name": "shopify.connect",
+      "description": "Registra y guarda las credenciales Shopify OAuth para un tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "shop_domain": {
+            "type": "string",
+            "description": "Dominio de la tienda (ejemplo.myshopify.com)",
+            "pattern": "^[a-z0-9-]+\\.myshopify\\.com$"
+          },
+          "access_token": {
+            "type": "string",
+            "description": "Access token OAuth de Shopify"
+          },
+          "webhook_secret": {
+            "type": "string",
+            "description": "Secret para validar webhooks (opcional)"
+          },
+          "api_version": {
+            "type": "string",
+            "default": "2024-04",
+            "description": "Versión de API Shopify"
+          }
+        },
+        "required": ["rut", "shop_domain", "access_token"]
+      }
+    },
+    {
+      "name": "shopify.list_orders",
+      "description": "Lista las últimas N órdenes de Shopify para un tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 250,
+            "description": "Número de órdenes a retornar"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["open", "closed", "cancelled", "any"],
+            "default": "any",
+            "description": "Filtrar por estado"
+          },
+          "financial_status": {
+            "type": "string",
+            "enum": ["paid", "pending", "refunded", "any"],
+            "description": "Filtrar por estado financiero"
+          }
+        },
+        "required": ["rut"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "orders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {"type": "integer"},
+                "order_number": {"type": "integer"},
+                "total_price": {"type": "string"},
+                "currency": {"type": "string"},
+                "customer": {"type": "object"},
+                "line_items": {"type": "array"},
+                "created_at": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "shopify.get_order",
+      "description": "Obtiene una orden específica por ID de Shopify",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "order_id": {
+            "type": "string",
+            "description": "ID de la orden en Shopify"
+          }
+        },
+        "required": ["rut", "order_id"]
+      }
+    },
+    {
+      "name": "shopify.list_products",
+      "description": "Lista productos de la tienda Shopify",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 50,
+            "maximum": 250
+          }
+        },
+        "required": ["rut"]
+      }
+    },
+    {
+      "name": "shopify.setup_webhooks",
+      "description": "Configura webhooks de Shopify hacia el MCP Server",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "webhooks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "orders/create",
+                "orders/paid",
+                "orders/updated",
+                "orders/cancelled",
+                "products/create",
+                "products/update",
+                "customers/create"
+              ]
+            },
+            "default": ["orders/create", "orders/paid"]
+          }
+        },
+        "required": ["rut"]
+      }
+    }
+  ],
+  "webhooks": [
+    {
+      "name": "orders/create",
+      "path": "/webhooks/shopify/orders/create",
+      "method": "POST",
+      "description": "Triggered cuando se crea una orden nueva",
+      "validation": "HMAC with webhook_secret"
+    },
+    {
+      "name": "orders/paid",
+      "path": "/webhooks/shopify/orders/paid",
+      "method": "POST",
+      "description": "Triggered cuando una orden es pagada",
+      "validation": "HMAC with webhook_secret"
+    }
+  ],
+  "examples": [
+    {
+      "tool": "shopify.connect",
+      "input": {
+        "rut": "76958020-3",
+        "shop_domain": "demo-smarter.myshopify.com",
+        "access_token": "shpat_xxxxx",
+        "api_version": "2024-04"
+      }
+    },
+    {
+      "tool": "shopify.list_orders",
+      "input": {
+        "rut": "76958020-3",
+        "limit": 10,
+        "financial_status": "paid"
+      }
+    }
+  ]
+}

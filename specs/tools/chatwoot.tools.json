@@ -1,0 +1,154 @@
+{
+  "name": "chatwoot-tools",
+  "version": "1.0.0",
+  "description": "MCP Tools para enviar mensajes y gestionar conversaciones en Chatwoot",
+  "provider": "smarteros-mcp",
+  "tools": [
+    {
+      "name": "chatwoot.connect",
+      "description": "Configura conexión a Chatwoot para un tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "base_url": {"type": "string", "default": "https://chat.smarterbot.cl"},
+          "account_id": {"type": "integer"},
+          "inbox_id": {"type": "integer"},
+          "api_access_token": {"type": "string"}
+        },
+        "required": ["rut", "account_id", "inbox_id", "api_access_token"]
+      }
+    },
+    {
+      "name": "chatwoot.send_message",
+      "description": "Envía un mensaje a una conversación existente",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "conversation_id": {"type": "integer"},
+          "content": {"type": "string", "description": "Contenido del mensaje"},
+          "message_type": {
+            "type": "string",
+            "enum": ["outgoing", "incoming"],
+            "default": "outgoing"
+          },
+          "private": {"type": "boolean", "default": false}
+        },
+        "required": ["rut", "conversation_id", "content"]
+      }
+    },
+    {
+      "name": "chatwoot.create_conversation",
+      "description": "Crea una nueva conversación para un contacto",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "contact_identifier": {
+            "type": "string",
+            "description": "Email o phone del contacto"
+          },
+          "contact_name": {"type": "string"},
+          "source_id": {
+            "type": "string",
+            "description": "Identificador externo (ej: shopify_order_123)"
+          }
+        },
+        "required": ["rut", "contact_identifier"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "conversation_id": {"type": "integer"},
+          "contact_id": {"type": "integer"}
+        }
+      }
+    },
+    {
+      "name": "chatwoot.add_tag",
+      "description": "Agrega una etiqueta a una conversación",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "conversation_id": {"type": "integer"},
+          "tag": {"type": "string", "examples": ["venta", "soporte", "urgente"]}
+        },
+        "required": ["rut", "conversation_id", "tag"]
+      }
+    },
+    {
+      "name": "chatwoot.assign_agent",
+      "description": "Asigna una conversación a un agente",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "conversation_id": {"type": "integer"},
+          "agent_id": {"type": "integer"}
+        },
+        "required": ["rut", "conversation_id", "agent_id"]
+      }
+    },
+    {
+      "name": "chatwoot.get_conversations",
+      "description": "Lista conversaciones del tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "status": {
+            "type": "string",
+            "enum": ["open", "resolved", "pending", "all"],
+            "default": "open"
+          },
+          "page": {"type": "integer", "default": 1}
+        },
+        "required": ["rut"]
+      }
+    }
+  ],
+  "use_cases": [
+    {
+      "name": "order_followup",
+      "description": "Seguimiento automático post-venta",
+      "flow": [
+        "1. Shopify webhook: order paid",
+        "2. chatwoot.create_conversation (contact from order)",
+        "3. chatwoot.send_message ('Gracias por tu compra...')",
+        "4. chatwoot.add_tag ('venta')"
+      ]
+    },
+    {
+      "name": "support_notification",
+      "description": "Notificar problema a soporte",
+      "flow": [
+        "1. Error detectado en sistema",
+        "2. chatwoot.create_conversation (admin)",
+        "3. chatwoot.send_message (detalle del error)",
+        "4. chatwoot.add_tag ('urgente')",
+        "5. chatwoot.assign_agent (support team)"
+      ]
+    }
+  ],
+  "examples": [
+    {
+      "tool": "chatwoot.send_message",
+      "input": {
+        "rut": "76958020-3",
+        "conversation_id": 456,
+        "content": "Hola! Tu pedido #12345 ha sido despachado. Track: ABC123"
+      }
+    },
+    {
+      "tool": "chatwoot.create_conversation",
+      "input": {
+        "rut": "76958020-3",
+        "contact_identifier": "cliente@demo.cl",
+        "contact_name": "Cliente Demo",
+        "source_id": "shopify_order_12345"
+      }
+    }
+  ]
+}

@@ -1,0 +1,176 @@
+{
+  "name": "odoo-tools",
+  "version": "1.0.0",
+  "description": "MCP Tools para crear entidades contables y de ventas en Odoo",
+  "provider": "smarteros-mcp",
+  "tools": [
+    {
+      "name": "odoo.connect",
+      "description": "Configura conexión a Odoo para un tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "base_url": {"type": "string", "example": "https://odoo.smarterbot.cl"},
+          "db": {"type": "string", "example": "tenant_76958020_3"},
+          "username": {"type": "string"},
+          "password": {"type": "string"},
+          "company_id": {"type": "integer", "default": 1}
+        },
+        "required": ["rut", "base_url", "db", "username", "password"]
+      }
+    },
+    {
+      "name": "odoo.ensure_partner",
+      "description": "Crea o actualiza un partner (cliente) en Odoo",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "partner_data": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string", "description": "Nombre del cliente"},
+              "email": {"type": "string"},
+              "phone": {"type": "string"},
+              "vat": {"type": "string", "description": "RUT del cliente"},
+              "street": {"type": "string"},
+              "city": {"type": "string"},
+              "country_id": {"type": "integer", "default": 46, "description": "Chile = 46"}
+            },
+            "required": ["name"]
+          }
+        },
+        "required": ["rut", "partner_data"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "partner_id": {"type": "integer"},
+          "created": {"type": "boolean"}
+        }
+      }
+    },
+    {
+      "name": "odoo.create_sale_order",
+      "description": "Crea una orden de venta en Odoo a partir de una venta normalizada",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {
+            "type": "string",
+            "description": "RUT del tenant"
+          },
+          "order_data": {
+            "type": "object",
+            "properties": {
+              "partner_id": {"type": "integer", "description": "ID del partner en Odoo"},
+              "order_lines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "product_id": {"type": "integer"},
+                    "product_name": {"type": "string"},
+                    "quantity": {"type": "number"},
+                    "price_unit": {"type": "number"}
+                  }
+                }
+              },
+              "external_reference": {"type": "string", "description": "Ref externa (ej: Shopify order #)"}
+            },
+            "required": ["partner_id", "order_lines"]
+          }
+        },
+        "required": ["rut", "order_data"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sale_order_id": {"type": "integer"},
+          "name": {"type": "string", "description": "Número de orden (SO001)"}
+        }
+      }
+    },
+    {
+      "name": "odoo.confirm_sale_order",
+      "description": "Confirma una orden de venta en Odoo",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "sale_order_id": {"type": "integer"}
+        },
+        "required": ["rut", "sale_order_id"]
+      }
+    },
+    {
+      "name": "odoo.create_invoice",
+      "description": "Genera factura desde una orden de venta",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "sale_order_id": {"type": "integer"}
+        },
+        "required": ["rut", "sale_order_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "invoice_id": {"type": "integer"},
+          "invoice_number": {"type": "string"},
+          "amount_total": {"type": "number"},
+          "amount_tax": {"type": "number"}
+        }
+      }
+    },
+    {
+      "name": "odoo.get_invoice",
+      "description": "Obtiene datos de una factura",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "invoice_id": {"type": "integer"}
+        },
+        "required": ["rut", "invoice_id"]
+      }
+    }
+  ],
+  "examples": [
+    {
+      "tool": "odoo.ensure_partner",
+      "input": {
+        "rut": "76958020-3",
+        "partner_data": {
+          "name": "Cliente Demo",
+          "email": "cliente@demo.cl",
+          "vat": "12345678-9",
+          "phone": "+56912345678"
+        }
+      }
+    },
+    {
+      "tool": "odoo.create_sale_order",
+      "input": {
+        "rut": "76958020-3",
+        "order_data": {
+          "partner_id": 123,
+          "order_lines": [
+            {
+              "product_id": 45,
+              "product_name": "Producto Demo",
+              "quantity": 2,
+              "price_unit": 10000
+            }
+          ],
+          "external_reference": "SHOPIFY-12345"
+        }
+      }
+    }
+  ]
+}

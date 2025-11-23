@@ -1,0 +1,137 @@
+{
+  "name": "n8n-tools",
+  "version": "1.0.0",
+  "description": "MCP Tools para disparar workflows n8n por tenant",
+  "provider": "smarteros-mcp",
+  "tools": [
+    {
+      "name": "n8n.connect",
+      "description": "Configura conexión a n8n para un tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "base_url": {"type": "string", "default": "https://n8n.smarterbot.cl"},
+          "api_key": {"type": "string"},
+          "workflow_ids": {
+            "type": "object",
+            "description": "Map de workflows por función",
+            "additionalProperties": {"type": "string"}
+          }
+        },
+        "required": ["rut", "api_key"]
+      }
+    },
+    {
+      "name": "n8n.trigger_workflow",
+      "description": "Ejecuta un workflow n8n para un tenant con payload dado",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "workflow_key": {
+            "type": "string",
+            "description": "Key del workflow (ej: 'shopify_to_odoo')",
+            "examples": ["shopify_to_odoo", "post_sale_followup", "inventory_sync"]
+          },
+          "payload": {
+            "type": "object",
+            "description": "Datos a enviar al workflow"
+          },
+          "wait_for_completion": {
+            "type": "boolean",
+            "default": false,
+            "description": "Esperar a que termine el workflow"
+          }
+        },
+        "required": ["rut", "workflow_key"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "execution_id": {"type": "string"},
+          "status": {"type": "string", "enum": ["running", "success", "error"]},
+          "result": {"type": "object", "description": "Solo si wait_for_completion=true"}
+        }
+      }
+    },
+    {
+      "name": "n8n.get_execution_status",
+      "description": "Consulta el estado de una ejecución de workflow",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"},
+          "execution_id": {"type": "string"}
+        },
+        "required": ["rut", "execution_id"]
+      }
+    },
+    {
+      "name": "n8n.list_workflows",
+      "description": "Lista workflows configurados para el tenant",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "rut": {"type": "string"}
+        },
+        "required": ["rut"]
+      }
+    }
+  ],
+  "common_workflows": [
+    {
+      "key": "shopify_to_odoo",
+      "name": "Shopify → Odoo Sync",
+      "description": "Sincroniza órdenes de Shopify a Odoo",
+      "trigger": "webhook",
+      "nodes": ["Shopify Order", "Transform", "Odoo Create Sale", "Chatwoot Notify"]
+    },
+    {
+      "key": "post_sale_followup",
+      "name": "Post-Sale Follow-up",
+      "description": "Envía mensajes de seguimiento post-venta",
+      "trigger": "schedule",
+      "nodes": ["Supabase Query", "Filter", "Chatwoot Send", "Log Event"]
+    },
+    {
+      "key": "inventory_sync",
+      "name": "Inventory Sync",
+      "description": "Sincroniza inventario Odoo ↔ Shopify",
+      "trigger": "schedule",
+      "nodes": ["Odoo Stock", "Compare", "Shopify Update", "Alert"]
+    },
+    {
+      "key": "dte_processor",
+      "name": "DTE Processor",
+      "description": "Procesa cola de DTEs pendientes",
+      "trigger": "schedule",
+      "nodes": ["Supabase DTE Queue", "Generate DTE", "Send SII", "Update Status"]
+    }
+  ],
+  "examples": [
+    {
+      "tool": "n8n.trigger_workflow",
+      "input": {
+        "rut": "76958020-3",
+        "workflow_key": "shopify_to_odoo",
+        "payload": {
+          "order_id": "12345",
+          "shop_domain": "demo-smarter.myshopify.com"
+        }
+      }
+    },
+    {
+      "tool": "n8n.trigger_workflow",
+      "input": {
+        "rut": "76958020-3",
+        "workflow_key": "post_sale_followup",
+        "payload": {
+          "customer_email": "cliente@demo.cl",
+          "order_number": "SO001"
+        },
+        "wait_for_completion": true
+      }
+    }
+  ]
+}
