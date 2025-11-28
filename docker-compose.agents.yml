@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=n8n.smarterbot.cl
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - NODE_ENV=production
+      - WEBHOOK_URL=https://n8n.smarterbot.cl/
+      - GENERIC_TIMEZONE=America/Santiago
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - /home/smarteros/smarteros-specs:/data/specs:ro
+    networks:
+      - smarteros-net
+
+  mcp-docker:
+    image: docker.io/library/docker:dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=/certs
+    volumes:
+      - docker_certs:/certs/client
+      - n8n_data:/data
+    networks:
+      - smarteros-net
+
+  mcp-github:
+    image: mcp/github:latest
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    networks:
+      - smarteros-net
+
+networks:
+  smarteros-net:
+    driver: bridge
+
+volumes:
+  n8n_data:
+  docker_certs:

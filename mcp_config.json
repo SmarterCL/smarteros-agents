@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "smarterbot-vercel": {
+      "url": "https://mcp.smarterbot.cl/mcp",
+      "transport": "streamable-http",
+      "description": "Servidor MCP desplegado en Vercel para herramientas SmarterOS"
+    },
+    "hostinger-api": {
+      "command": "hostinger-api-mcp",
+      "env": {
+        "API_TOKEN": "<vault:smarteros/mcp/hostinger:api_token>",
+        "DEBUG": "false"
+      },
+      "description": "Proveedor oficial Hostinger API via MCP (gestión VPS, dominios, billing)"
+    }
+  }
+}
