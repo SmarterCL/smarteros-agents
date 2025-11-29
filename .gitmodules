@@ -1,0 +1,51 @@
+[submodule "SmarterOS"]
+	path = SmarterOS
+	url = https://github.com/SmarterCL/SmarterOS
+[submodule "Sologist"]
+	path = Sologist
+	url = https://github.com/SmarterCL/Sologist
+[submodule "api.smarterbot.cl"]
+	path = api.smarterbot.cl
+	url = https://github.com/SmarterCL/api.smarterbot.cl.git
+[submodule "app.smarterbot.cl"]
+	path = app.smarterbot.cl
+	url = https://github.com/SmarterCL/app.smarterbot.cl
+[submodule "app.smarterbot.store"]
+	path = app.smarterbot.store
+	url = https://github.com/SmarterCL/app.smarterbot.store
+[submodule "crm.smarterbot.cl"]
+	path = crm.smarterbot.cl
+	url = https://github.com/SmarterCL/crm.smarterbot.cl
+[submodule "dkcompose"]
+	path = dkcompose
+	url = https://github.com/SmarterCL/dkcompose
+[submodule "fulldaygo.smarterbot.cl"]
+	path = fulldaygo.smarterbot.cl
+	url = https://github.com/SmarterCL/fulldaygo.smarterbot.cl
+[submodule "ia.smarterbot.cl"]
+	path = ia.smarterbot.cl
+	url = https://github.com/SmarterCL/ia.smarterbot.cl
+[submodule "login.smarterbot.store"]
+	path = login.smarterbot.store
+	url = https://github.com/SmarterCL/login.smarterbot.store
+[submodule "nunex.lat"]
+	path = nunex.lat
+	url = https://github.com/SmarterCL/nunex.lat
+[submodule "smarterbot.cl"]
+	path = smarterbot.cl
+	url = https://github.com/SmarterCL/smarterbot.cl
+[submodule "smarterbot.store"]
+	path = smarterbot.store
+	url = https://github.com/SmarterCL/smarterbot.store
+[submodule "smartercl-odoo"]
+	path = smartercl-odoo
+	url = https://github.com/SmarterCL/odoo.git
+[submodule "smarteros-os"]
+	path = smarteros-os
+	url = https://github.com/SmarterCL/smarteros-os.git
+[submodule "smarteros-specs"]
+	path = smarteros-specs
+	url = https://github.com/SmarterCL/smarteros-specs
+[submodule "tienda.smarterbot.cl"]
+	path = tienda.smarterbot.cl
+	url = https://github.com/SmarterCL/tienda.smarterbot.cl
